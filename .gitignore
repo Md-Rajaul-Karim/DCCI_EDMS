@@ -1,0 +1,33 @@
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+bin/
+obj/
+*.log
+
+## Visual Studio / VSCode
+.vs/
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.user
+*.suo
+
+## Node / Frontend
+**/node_modules/
+**/dist/
+.vite/
+*.local
+
+## SQLite WAL files
+*.db-shm
+*.db-wal
+
+## OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

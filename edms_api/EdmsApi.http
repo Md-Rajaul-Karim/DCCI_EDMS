@@ -1,0 +1,6 @@
+@EdmsApi_HostAddress = http://localhost:5162
+
+GET {{EdmsApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
