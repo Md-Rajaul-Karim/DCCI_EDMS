@@ -162,6 +162,36 @@ public class WorkflowController : ControllerBase
                 return ApiResponse<object>.Fail("Initiators are not authorized to Reject, Query, Review, or Approve submitted proposals.");
             }
 
+            // Desk Custody Lock: Only the officer whose desk matches the current task can act
+            if (!req.Action.Equals("Clarify", StringComparison.OrdinalIgnoreCase))
+            {
+                bool isCustodian = false;
+                string currentTask = caseItem.TaskName.ToLower().Trim();
+                string actingRole = req.Role.ToLower().Trim();
+
+                if (currentTask.StartsWith("review"))
+                {
+                    if (currentTask.Contains("head of department") && actingRole.Contains("head of department")) isCustodian = true;
+                    else if (currentTask.Contains("accounts") && actingRole.Contains("accounts")) isCustodian = true;
+                    else if (currentTask.Contains("secretary general") && actingRole.Contains("secretary general")) isCustodian = true;
+                    else if (currentTask.Contains("president") && actingRole.Contains("president")) isCustodian = true;
+                    else if (currentTask.Contains("checker") && actingRole.Contains("checker")) isCustodian = true;
+                    else if (currentTask.Contains("internal reviewer") || currentTask.Equals("reviewer review")) isCustodian = true;
+                }
+                else
+                {
+                    if (currentTask.Contains("head of department") && actingRole.Contains("head of department")) isCustodian = true;
+                    else if (currentTask.Contains("accounts") && actingRole.Contains("accounts")) isCustodian = true;
+                    else if (currentTask.Contains("secretary general") && actingRole.Contains("secretary general")) isCustodian = true;
+                    else if (currentTask.Contains("president") && actingRole.Contains("president")) isCustodian = true;
+                }
+
+                if (!isCustodian)
+                {
+                    return ApiResponse<object>.Fail($"Desk Custody Lock: Case is currently pending at '{caseItem.TaskName}'. '{req.Role}' cannot act on this case until it is at their desk.");
+                }
+            }
+
             string newTaskName = caseItem.TaskName;
             string newStatus = caseItem.AppStatus;
             string timeStr = DateTime.Now.ToString("MMMM dd, yyyy, h:mm tt");

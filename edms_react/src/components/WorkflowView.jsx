@@ -137,6 +137,35 @@ export default function WorkflowView({ currentUser }) {
     });
   };
 
+  // Desk Authority / Current Custodian Helper
+  const isMyTurnToAct = (role, taskName) => {
+    if (!role || !taskName) return false;
+    const r = role.toLowerCase().trim();
+    const t = taskName.toLowerCase().trim();
+
+    // If case is under Review:
+    if (t.startsWith('review')) {
+      if (t.includes('head of department') && r.includes('head of department')) return true;
+      if (t.includes('accounts') && r.includes('accounts')) return true;
+      if (t.includes('secretary general') && r.includes('secretary general')) return true;
+      if (t.includes('president') && r.includes('president')) return true;
+      if (t.includes('checker') && r.includes('checker')) return true;
+      if (t.includes('internal reviewer') || t === 'reviewer review') {
+        return r.includes('head of department') || r.includes('accounts');
+      }
+      return false;
+    }
+
+    // Standard sequential desks:
+    if (t.includes('head of department') && r.includes('head of department')) return true;
+    if (t.includes('accounts') && r.includes('accounts')) return true;
+    if (t.includes('secretary general') && r.includes('secretary general')) return true;
+    if (t.includes('president') && r.includes('president')) return true;
+    if (t.includes('initiator') && r.includes('initiator')) return true;
+
+    return false;
+  };
+
   useEffect(() => {
     loadBucketCounts();
     loadCases();
@@ -330,6 +359,15 @@ export default function WorkflowView({ currentUser }) {
 
   const handleExecuteAction = async (actionType, targetRole = null, customComments = null) => {
     const finalComments = customComments !== null ? customComments : actionComments;
+
+    if (actionType !== 'Clarify' && !isMyTurnToAct(actingRole, selectedCase.TaskName)) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Desk Custody Lock',
+        text: `This file is currently pending at "${selectedCase.TaskName}". You cannot take action while it is at another desk.`
+      });
+      return;
+    }
 
     if ((actionType === 'Query' || actionType === 'Reject' || actionType === 'Clarify') && !finalComments.trim()) {
       Swal.fire('Comments Required', `Please write remarks or clarification details before submitting.`, 'warning');
@@ -1104,114 +1142,139 @@ export default function WorkflowView({ currentUser }) {
                       </div>
                     </div>
                   ) : (
-                  <div className="bg-white p-3 rounded shadow-sm border border-success border-opacity-50">
-                    <div className="d-flex align-items-center justify-content-between mb-2 border-bottom pb-2">
-                      <h6 className="fw-bold text-success mb-0 d-flex align-items-center gap-1">
-                        <ShieldCheck size={18} /> Approver Action Desk ({selectedCase.TaskName})
-                      </h6>
-                      <div className="d-flex align-items-center gap-2">
-                        <small className="text-muted fw-semibold">Acting Desk:</small>
-                        <select 
-                          className="form-select form-select-sm"
-                          style={{ width: '330px', fontWeight: 600 }}
-                          value={actingRole}
-                          onChange={(e) => {
-                            const selRole = e.target.value;
-                            setActingRole(selRole);
-                            const matched = SYSTEM_USERS.find(usr => usr.role === selRole);
-                            if (matched) setActingUser(matched.name);
-                          }}
-                        >
-                          {SYSTEM_USERS.map((u) => (
-                            <option key={u.id} value={u.role}>
-                              {u.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                    (() => {
+                      const isCurrentDeskOfficer = isMyTurnToAct(actingRole, selectedCase.TaskName);
+                      return (
+                        <div className={`p-3 rounded shadow-sm border ${isCurrentDeskOfficer ? 'bg-white border-success border-opacity-50' : 'bg-light border-secondary border-opacity-25'}`}>
+                          <div className="d-flex align-items-center justify-content-between mb-2 border-bottom pb-2">
+                            <h6 className="fw-bold text-success mb-0 d-flex align-items-center gap-1">
+                              <ShieldCheck size={18} /> Approver Action Desk ({selectedCase.TaskName})
+                            </h6>
+                            <div className="d-flex align-items-center gap-2">
+                              <small className="text-muted fw-semibold">Acting Desk:</small>
+                              <select 
+                                className="form-select form-select-sm"
+                                style={{ width: '330px', fontWeight: 600 }}
+                                value={actingRole}
+                                onChange={(e) => {
+                                  const selRole = e.target.value;
+                                  setActingRole(selRole);
+                                  const matched = SYSTEM_USERS.find(usr => usr.role === selRole);
+                                  if (matched) setActingUser(matched.name);
+                                }}
+                              >
+                                {SYSTEM_USERS.map((u) => (
+                                  <option key={u.id} value={u.role}>
+                                    {u.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
 
-                    <div className="mb-3">
-                      <label className="form-label small fw-bold">Official Note / Remarks (নোট বা মন্তব্য):</label>
-                      <textarea 
-                        rows="2"
-                        className="form-control form-control-sm"
-                        placeholder="Write your approval notes, query clarification, or observations..."
-                        value={actionComments}
-                        onChange={(e) => setActionComments(e.target.value)}
-                      ></textarea>
-                    </div>
+                          {!isCurrentDeskOfficer && (
+                            <div className="alert alert-warning py-2 px-3 d-flex align-items-center justify-content-between mb-3 border border-warning">
+                              <div className="d-flex align-items-center gap-2">
+                                <Clock size={16} className="text-warning-emphasis flex-shrink-0" />
+                                <span className="small text-dark">
+                                  <strong>ডেস্ক লক (Desk Lock):</strong> নথিটি বর্তমানে <strong>{selectedCase.TaskName}</strong> ডেস্কে অবস্থান করছে। 
+                                  অন্য ডেস্কে থাকা অবস্থায় <strong>{actingRole}</strong>-এর জন্য অ্যাকশন বাটনসমূহ নিষ্ক্রিয় (Non-clickable)। নথিটি আপনার ডেস্কে আসলে বা রিভিউতে পাঠালে বাটনগুলো পুনরায় সক্রিয় হবে।
+                                </span>
+                              </div>
+                              <span className="badge bg-warning text-dark flex-shrink-0 ms-2">Read-Only Mode</span>
+                            </div>
+                          )}
 
-                    <div className="d-flex justify-content-end gap-2 flex-wrap">
-                      <button 
-                        type="button" 
-                        className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
-                        onClick={() => handleExecuteAction('Reject')}
-                        disabled={isActing}
-                      >
-                        <X size={14} /> Reject
-                      </button>
+                          <div className="mb-3">
+                            <label className="form-label small fw-bold">Official Note / Remarks (নোট বা মন্তব্য):</label>
+                            <textarea 
+                              rows="2"
+                              className="form-control form-control-sm"
+                              placeholder={!isCurrentDeskOfficer ? `নথিটি বর্তমানে ${selectedCase.TaskName} ডেস্কে পেন্ডিং। মন্তব্য লেখার অপশন লক করা রয়েছে।` : "Write your approval notes, query clarification, or observations..."}
+                              value={actionComments}
+                              onChange={(e) => setActionComments(e.target.value)}
+                              disabled={!isCurrentDeskOfficer || isActing}
+                            ></textarea>
+                          </div>
 
-                      <button 
-                        type="button" 
-                        className="btn btn-sm btn-outline-warning text-dark d-flex align-items-center gap-1"
-                        onClick={() => handleExecuteAction('Query')}
-                        disabled={isActing}
-                      >
-                        <HelpCircle size={14} /> Query / Clarification
-                      </button>
+                          <div className="d-flex justify-content-end gap-2 flex-wrap">
+                            <button 
+                              type="button" 
+                              className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+                              onClick={() => handleExecuteAction('Reject')}
+                              disabled={isActing || !isCurrentDeskOfficer}
+                              style={!isCurrentDeskOfficer ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                              title={!isCurrentDeskOfficer ? `Pending at ${selectedCase.TaskName}` : "Reject Proposal"}
+                            >
+                              <X size={14} /> Reject
+                            </button>
 
-                      <button 
-                        type="button" 
-                        className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
-                        onClick={handleReviewAction}
-                        disabled={isActing}
-                        title="Send to a specific officer or cell for internal review"
-                      >
-                        <Eye size={14} /> Review
-                      </button>
+                            <button 
+                              type="button" 
+                              className="btn btn-sm btn-outline-warning text-dark d-flex align-items-center gap-1"
+                              onClick={() => handleExecuteAction('Query')}
+                              disabled={isActing || !isCurrentDeskOfficer}
+                              style={!isCurrentDeskOfficer ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                              title={!isCurrentDeskOfficer ? `Pending at ${selectedCase.TaskName}` : "Query / Clarification"}
+                            >
+                              <HelpCircle size={14} /> Query / Clarification
+                            </button>
 
-                      <button 
-                        type="button" 
-                        className={`btn btn-sm ${actingRole === 'President' ? 'btn-danger' : selectedCase?.TaskName?.toLowerCase().startsWith('review') ? 'btn-primary' : 'btn-success'} px-3 d-flex align-items-center gap-1 fw-bold`}
-                        onClick={() => handleExecuteAction('Approve')}
-                        disabled={isActing}
-                        title={`Approve and forward according to DCCI workflow hierarchy`}
-                      >
-                        {selectedCase?.TaskName?.toLowerCase().startsWith('review') ? (
-                          (() => {
-                            const lastRev = [...actionHistory].reverse().find(a => a.ActionType === 'Review');
-                            const returnTo = lastRev?.FromRole || 'Secretary General';
-                            return (
-                              <>
-                                <Check size={16} /> Submit Review & Return to {returnTo}
-                              </>
-                            );
-                          })()
-                        ) : actingRole === 'President' ? (
-                          <>
-                            <CheckCircle2 size={16} /> Final Approve & Complete (চূড়ান্ত অনুমোদন)
-                          </>
-                        ) : actingRole === 'Secretary General' ? (
-                          <>
-                            <Check size={16} /> Approve & Forward &rarr; President
-                          </>
-                        ) : actingRole === 'Accounts & Finance' ? (
-                          <>
-                            <Check size={16} /> Approve & Forward &rarr; Secretary General
-                          </>
-                        ) : actingRole === 'Head of Department' ? (
-                          <>
-                            <Check size={16} /> Approve & Forward &rarr; Accounts & Finance
-                          </>
-                        ) : (
-                          <>
-                            <Check size={16} /> Approve & Forward
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                            <button 
+                              type="button" 
+                              className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+                              onClick={handleReviewAction}
+                              disabled={isActing || !isCurrentDeskOfficer}
+                              style={!isCurrentDeskOfficer ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                              title={!isCurrentDeskOfficer ? `Pending at ${selectedCase.TaskName}` : "Send for Review"}
+                            >
+                              <Eye size={14} /> Review
+                            </button>
+
+                            <button 
+                              type="button" 
+                              className={`btn btn-sm ${actingRole === 'President' ? 'btn-danger' : selectedCase?.TaskName?.toLowerCase().startsWith('review') ? 'btn-primary' : 'btn-success'} px-3 d-flex align-items-center gap-1 fw-bold`}
+                              onClick={() => handleExecuteAction('Approve')}
+                              disabled={isActing || !isCurrentDeskOfficer}
+                              style={!isCurrentDeskOfficer ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                              title={!isCurrentDeskOfficer ? `Pending at ${selectedCase.TaskName}. Action disabled.` : `Approve and forward according to DCCI workflow hierarchy`}
+                            >
+                              {selectedCase?.TaskName?.toLowerCase().startsWith('review') ? (
+                                (() => {
+                                  const lastRev = [...actionHistory].reverse().find(a => a.ActionType === 'Review');
+                                  const returnTo = lastRev?.FromRole || 'Secretary General';
+                                  return (
+                                    <>
+                                      <Check size={16} /> Submit Review & Return to {returnTo}
+                                    </>
+                                  );
+                                })()
+                              ) : actingRole === 'President' ? (
+                                <>
+                                  <CheckCircle2 size={16} /> Final Approve & Complete (চূড়ান্ত অনুমোদন)
+                                </>
+                              ) : actingRole === 'Secretary General' ? (
+                                <>
+                                  <Check size={16} /> Approve & Forward &rarr; President
+                                </>
+                              ) : actingRole === 'Accounts & Finance' ? (
+                                <>
+                                  <Check size={16} /> Approve & Forward &rarr; Secretary General
+                                </>
+                              ) : actingRole === 'Head of Department' ? (
+                                <>
+                                  <Check size={16} /> Approve & Forward &rarr; Accounts & Finance
+                                </>
+                              ) : (
+                                <>
+                                  <Check size={16} /> Approve & Forward
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
                   )
                 )}
 
