@@ -336,8 +336,9 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
               })}
 
               <div className="px-3 pt-2 mt-1 border-top text-muted" style={{ fontSize: '0.68rem', lineHeight: '1.3' }}>
-                <div className="fw-semibold text-dark mb-1">DCCI 5-Stage Approval Flow:</div>
+                <div className="fw-semibold text-dark mb-1">DCCI Approval & Review Flow:</div>
                 <span className="text-primary fw-medium">Initiator</span> &rarr;{' '}
+                <span className="fw-medium" style={{ color: '#059669' }}>Checker</span> &rarr;{' '}
                 <span className="text-success fw-medium">HOD</span> &rarr;{' '}
                 <span className="text-warning text-dark fw-medium">Accounts</span> &rarr;{' '}
                 <span style={{ color: '#7c3aed' }} className="fw-medium">SG</span> &rarr;{' '}

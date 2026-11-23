@@ -180,7 +180,8 @@ public class WorkflowController : ControllerBase
                 }
                 else
                 {
-                    if (currentTask.Contains("head of department") && actingRole.Contains("head of department")) isCustodian = true;
+                    if (currentTask.Contains("checker") && actingRole.Contains("checker")) isCustodian = true;
+                    else if (currentTask.Contains("head of department") && actingRole.Contains("head of department")) isCustodian = true;
                     else if (currentTask.Contains("accounts") && actingRole.Contains("accounts")) isCustodian = true;
                     else if (currentTask.Contains("secretary general") && actingRole.Contains("secretary general")) isCustodian = true;
                     else if (currentTask.Contains("president") && actingRole.Contains("president")) isCustodian = true;
@@ -256,6 +257,11 @@ public class WorkflowController : ControllerBase
                     else if (req.Role.Contains("Head of Department", StringComparison.OrdinalIgnoreCase))
                     {
                         newTaskName = "Accounts & Finance";
+                        newStatus = "In Progress";
+                    }
+                    else if (req.Role.Contains("Checker", StringComparison.OrdinalIgnoreCase) || caseItem.TaskName.Contains("Checker", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newTaskName = "Head of Department";
                         newStatus = "In Progress";
                     }
                     else if (req.Role.Contains("Initiator", StringComparison.OrdinalIgnoreCase))

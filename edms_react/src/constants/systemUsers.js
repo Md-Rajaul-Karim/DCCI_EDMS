@@ -13,8 +13,21 @@ export const SYSTEM_USERS = [
     deskName: 'Initiator Desk'
   },
   {
-    id: 'hod',
+    id: 'checker',
     order: 2,
+    role: 'Checker',
+    name: 'Rahul Acharjee',
+    designation: 'Officer IT (Technical Checker)',
+    avatar: 'RA',
+    color: '#059669',
+    bgLight: '#d1fae5',
+    label: 'Checker / Reviewer (Rahul Acharjee)',
+    nextRole: 'Head of Department',
+    deskName: 'Checker Desk'
+  },
+  {
+    id: 'hod',
+    order: 3,
     role: 'Head of Department',
     name: 'Engr. Dilip K Roy',
     designation: 'Head of IT & Department',
@@ -27,7 +40,7 @@ export const SYSTEM_USERS = [
   },
   {
     id: 'accounts',
-    order: 3,
+    order: 4,
     role: 'Accounts & Finance',
     name: 'CFO / Chief Accounts Officer',
     designation: 'Chief Accounts Officer',
@@ -40,7 +53,7 @@ export const SYSTEM_USERS = [
   },
   {
     id: 'sg',
-    order: 4,
+    order: 5,
     role: 'Secretary General',
     name: 'Secretary General (SG)',
     designation: 'Secretary General / মহাসচিব',
@@ -53,7 +66,7 @@ export const SYSTEM_USERS = [
   },
   {
     id: 'president',
-    order: 5,
+    order: 6,
     role: 'President',
     name: 'President of DCCI',
     designation: 'মাননীয় সভাপতি, DCCI (চূড়ান্ত অনুমোদন)',
@@ -66,4 +79,4 @@ export const SYSTEM_USERS = [
   }
 ];
 
-export const DEFAULT_USER = SYSTEM_USERS[1]; // Default: Engr. Dilip K Roy (Head of Department)
+export const DEFAULT_USER = SYSTEM_USERS[2]; // Default: Engr. Dilip K Roy (Head of Department)

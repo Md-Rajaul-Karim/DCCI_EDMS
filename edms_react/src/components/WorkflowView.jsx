@@ -638,12 +638,19 @@ export default function WorkflowView({ currentUser }) {
           </div>
         </div>
 
-        {/* DCCI 5-Stage Approval Hierarchy Indicator */}
+        {/* DCCI Approval Hierarchy Indicator */}
         <div className="bg-white p-2 px-3 rounded shadow-sm border mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
           <div className="d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: '0.78rem' }}>
             <span className="text-muted fw-bold">Approval Hierarchy:</span>
             <span className={`badge px-2 py-1 ${currentUser?.role === 'Initiator' ? 'bg-primary' : 'bg-light text-secondary border'}`}>
               ১. Initiator (Arman)
+            </span>
+            <ChevronRight size={13} className="text-muted" />
+            <span 
+              className={`badge px-2 py-1 ${currentUser?.role === 'Checker' ? 'text-white' : 'bg-light text-secondary border'}`}
+              style={{ backgroundColor: currentUser?.role === 'Checker' ? '#059669' : undefined }}
+            >
+              Checker (Rahul)
             </span>
             <ChevronRight size={13} className="text-muted" />
             <span className={`badge px-2 py-1 ${currentUser?.role === 'Head of Department' ? 'bg-success' : 'bg-light text-secondary border'}`}>
@@ -1266,7 +1273,7 @@ export default function WorkflowView({ currentUser }) {
                               {selectedCase?.TaskName?.toLowerCase().startsWith('review') ? (
                                 (() => {
                                   const lastRev = [...actionHistory].reverse().find(a => a.ActionType === 'Review');
-                                  const returnTo = lastRev?.FromRole || 'Secretary General';
+                                  const returnTo = lastRev?.FromRole || (actingRole === 'Checker' ? 'Head of Department' : 'Secretary General');
                                   return (
                                     <>
                                       <Check size={16} /> Submit Review & Return to {returnTo}
@@ -1288,6 +1295,10 @@ export default function WorkflowView({ currentUser }) {
                               ) : actingRole === 'Head of Department' ? (
                                 <>
                                   <Check size={16} /> Approve & Forward &rarr; Accounts & Finance
+                                </>
+                              ) : actingRole === 'Checker' ? (
+                                <>
+                                  <Check size={16} /> Technical Verification & Forward &rarr; Head of Department
                                 </>
                               ) : (
                                 <>
