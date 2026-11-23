@@ -188,7 +188,22 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
   const handleUploadVersion = async (e) => {
     e.preventDefault();
     if (!newVersionFile) {
-      Swal.fire('Error', 'Please select a file to upload as new version.', 'warning');
+      Swal.fire({
+        icon: 'warning',
+        title: 'File Required',
+        text: 'অনুগ্রহ করে নতুন ভার্সনের ফাইলটি সিলেক্ট করুন।',
+        confirmButtonColor: '#0b7337'
+      });
+      return;
+    }
+
+    if (!changeSummary || !changeSummary.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Change Summary Required',
+        text: 'অনুগ্রহ করে Change summary ফিল্ডে একটি বিবরণ দিন (যেমন: Revised prices, Updated specification)।',
+        confirmButtonColor: '#0b7337'
+      });
       return;
     }
 
@@ -196,7 +211,9 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
       const formData = new FormData();
       formData.append('file', newVersionFile);
       formData.append('documentId', doc.Id);
-      formData.append('changeSummary', changeSummary);
+      formData.append('changeSummary', changeSummary.trim());
+      formData.append('user', activeUser.name);
+      formData.append('role', activeUser.role || activeUser.designation);
 
       const res = await Api.post('/Document/UploadNewVersion', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -206,8 +223,8 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
         Swal.fire({
           icon: 'success',
           title: 'Version Updated',
-          text: `New version ${res.data.data.version} created!`,
-          timer: 1500,
+          text: `New version ${res.data.data.version} created by ${activeUser.name}!`,
+          timer: 1800,
           showConfirmButton: false
         });
         setIsUploadingVersion(false);
@@ -215,10 +232,11 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
         setChangeSummary('');
         setActiveVersion(null); // Return to latest
         loadVersions(doc.Id);
+        loadActivityLogs(doc.Id);
         if (onRefresh) onRefresh();
       }
     } catch (err) {
-      Swal.fire('Error', err.message, 'error');
+      Swal.fire('Error', err.response?.data?.message || err.message, 'error');
     }
   };
 
@@ -867,8 +885,12 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
                             <strong>Date:</strong> {v.CreatedAt}
                           </div>
 
-                          <div className="small mb-2">
+                          <div className="small mb-1">
                             <strong>Summary:</strong> {v.ChangeSummary || 'Document revision'}
+                          </div>
+
+                          <div className="small text-muted mb-2">
+                            <strong>Uploaded By:</strong> <span className="text-dark fw-semibold">{v.ChangedBy || 'Engr. Dilip K Roy'}</span>
                           </div>
 
                           {/* Version Actions: Preview & Download */}

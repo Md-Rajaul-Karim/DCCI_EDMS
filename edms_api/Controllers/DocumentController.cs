@@ -516,13 +516,14 @@ public class DocumentController : ControllerBase
                 CreatedBy = "DILIP"
             });
 
+            var (actingUser, actingRole) = GetActingUser();
+
             // Version 1.00 record
             await conn.ExecuteAsync(@"
                 INSERT INTO DocumentVersions (DocumentId, VersionNumber, FilePath, FileSizeBytes, ChangedBy, ChangeSummary, CreatedAt)
-                VALUES (@DocumentId, '1.00', @FilePath, @FileSizeBytes, 'DILIP', 'Initial Document Upload', datetime('now'));
-            ", new { DocumentId = docId, FilePath = relativePath, FileSizeBytes = file.Length });
+                VALUES (@DocumentId, '1.00', @FilePath, @FileSizeBytes, @ChangedBy, 'Initial Document Upload', datetime('now'));
+            ", new { DocumentId = docId, FilePath = relativePath, FileSizeBytes = file.Length, ChangedBy = actingUser });
 
-            var (actingUser, actingRole) = GetActingUser();
             await LogActivityAsync(conn, docId, meta.Name, "UPLOAD", actingUser, actingRole, $"Initial document upload with version v1.00 ({meta.DocumentType})");
 
             return ApiResponse<object>.Success(new { DocumentId = docId, FilePath = relativePath }, "Document uploaded successfully");
@@ -535,7 +536,10 @@ public class DocumentController : ControllerBase
 
     [HttpPost("UploadNewVersion")]
     [RequestSizeLimit(209715200)]
-    public async Task<ApiResponse<object>> UploadNewVersion([FromForm] IFormFile file, [FromForm] int documentId, [FromForm] string changeSummary)
+    public async Task<ApiResponse<object>> UploadNewVersion(
+        [FromForm] IFormFile file, 
+        [FromForm] int documentId, 
+        [FromForm] string? changeSummary = null)
     {
         try
         {
@@ -544,6 +548,9 @@ public class DocumentController : ControllerBase
 
             var current = await conn.QueryFirstOrDefaultAsync<DocumentItem>("SELECT * FROM Documents WHERE Id = @Id", new { Id = documentId });
             if (current == null) return ApiResponse<object>.Fail("Document not found");
+
+            var (actingUser, actingRole) = GetActingUser();
+            var summary = string.IsNullOrWhiteSpace(changeSummary) ? "Document revision update" : changeSummary.Trim();
 
             // Calculate new version number: 1.00 -> 2.00 or +0.10
             var vNum = 1.0;
@@ -587,20 +594,20 @@ public class DocumentController : ControllerBase
             // Insert new version history record
             await conn.ExecuteAsync(@"
                 INSERT INTO DocumentVersions (DocumentId, VersionNumber, FilePath, FileSizeBytes, ChangedBy, ChangeSummary, CreatedAt)
-                VALUES (@DocumentId, @VersionNumber, @FilePath, @FileSizeBytes, 'DILIP', @Summary, datetime('now'));
+                VALUES (@DocumentId, @VersionNumber, @FilePath, @FileSizeBytes, @ChangedBy, @Summary, datetime('now'));
             ", new
             {
                 DocumentId = documentId,
                 VersionNumber = newVersionStr,
                 FilePath = relativePath,
                 FileSizeBytes = file.Length,
-                Summary = string.IsNullOrWhiteSpace(changeSummary) ? "Version update" : changeSummary
+                ChangedBy = actingUser,
+                Summary = summary
             });
 
-            var (actingUser, actingRole) = GetActingUser();
-            await LogActivityAsync(conn, documentId, current.Name, "NEW_VERSION", actingUser, actingRole, $"New version v{newVersionStr} uploaded: {changeSummary}");
+            await LogActivityAsync(conn, documentId, current.Name, "NEW_VERSION", actingUser, actingRole, $"New version v{newVersionStr} uploaded by {actingUser}: {summary}");
 
-            return ApiResponse<object>.Success(new { Version = newVersionStr, FilePath = relativePath }, "New version uploaded successfully");
+            return ApiResponse<object>.Success(new { Version = newVersionStr, FilePath = relativePath, ChangedBy = actingUser }, "New version uploaded successfully");
         }
         catch (Exception ex)
         {
