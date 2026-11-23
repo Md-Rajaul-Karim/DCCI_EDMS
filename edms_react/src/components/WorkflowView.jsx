@@ -27,7 +27,8 @@ import {
   ArrowRight,
   Building,
   CheckCircle2,
-  Calendar
+  Calendar,
+  Info
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { SYSTEM_USERS } from '../constants/systemUsers';
@@ -1067,6 +1068,42 @@ export default function WorkflowView({ currentUser }) {
 
                 {/* 2. Live Approver Action Panel (Approve / Query / Forward / Reject) */}
                 {selectedCase.AppStatus !== 'Complete' && selectedCase.AppStatus !== 'Rejected' && selectedCase.AppStatus !== 'Query' && (
+                  actingRole === 'Initiator' ? (
+                    <div className="bg-light p-3 rounded border border-primary border-opacity-25 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                      <div className="d-flex align-items-center gap-2">
+                        <div className="bg-primary bg-opacity-10 text-primary p-2 rounded flex-shrink-0">
+                          <Info size={22} />
+                        </div>
+                        <div>
+                          <div className="fw-bold text-dark small">Initiator Desk ({selectedCase.Initiator || 'Md. Arman Hossen'})</div>
+                          <div className="text-secondary small" style={{ fontSize: '0.78rem' }}>
+                            এই প্রস্তাবনাটি আপনি ইতিমধ্যে দাখিল করেছেন এবং বর্তমানে <strong>{selectedCase.TaskName}</strong> ডেস্কে অনুমোদনাধীন রয়েছে। 
+                            প্রশাসনিক নিয়ম অনুযায়ী আবেদনকারী (Initiator) নিজের দাখিলকৃত ফাইলে Reject, Query, Review বা Approve করতে পারেন না।
+                          </div>
+                        </div>
+                      </div>
+                      <div className="d-flex align-items-center gap-2">
+                        <small className="text-muted fw-semibold">Switch Desk:</small>
+                        <select 
+                          className="form-select form-select-sm"
+                          style={{ width: '280px', fontWeight: 600 }}
+                          value={actingRole}
+                          onChange={(e) => {
+                            const selRole = e.target.value;
+                            setActingRole(selRole);
+                            const matched = SYSTEM_USERS.find(usr => usr.role === selRole);
+                            if (matched) setActingUser(matched.name);
+                          }}
+                        >
+                          {SYSTEM_USERS.map((u) => (
+                            <option key={u.id} value={u.role}>
+                              {u.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="bg-white p-3 rounded shadow-sm border border-success border-opacity-50">
                     <div className="d-flex align-items-center justify-content-between mb-2 border-bottom pb-2">
                       <h6 className="fw-bold text-success mb-0 d-flex align-items-center gap-1">
@@ -1175,6 +1212,7 @@ export default function WorkflowView({ currentUser }) {
                       </button>
                     </div>
                   </div>
+                  )
                 )}
 
               </div>

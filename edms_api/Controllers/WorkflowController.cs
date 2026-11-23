@@ -151,6 +151,17 @@ public class WorkflowController : ControllerBase
 
             if (caseItem == null) return ApiResponse<object>.Fail("Workflow case not found");
 
+            // Initiator RBAC: Initiators cannot Reject, Query, Review, or Approve proposals
+            if (req.Role.Contains("Initiator", StringComparison.OrdinalIgnoreCase) && 
+                (req.Action.Equals("Reject", StringComparison.OrdinalIgnoreCase) || 
+                 req.Action.Equals("Query", StringComparison.OrdinalIgnoreCase) || 
+                 req.Action.Equals("Review", StringComparison.OrdinalIgnoreCase) ||
+                 req.Action.Equals("Forward", StringComparison.OrdinalIgnoreCase) ||
+                 req.Action.Equals("Approve", StringComparison.OrdinalIgnoreCase)))
+            {
+                return ApiResponse<object>.Fail("Initiators are not authorized to Reject, Query, Review, or Approve submitted proposals.");
+            }
+
             string newTaskName = caseItem.TaskName;
             string newStatus = caseItem.AppStatus;
             string timeStr = DateTime.Now.ToString("MMMM dd, yyyy, h:mm tt");
