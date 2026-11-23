@@ -37,7 +37,7 @@ export default function ExplorerView({ onNavigateUpload, globalSearch }) {
   const [selectedDocForModal, setSelectedDocForModal] = useState(null);
   const [showArchivedOnly, setShowArchivedOnly] = useState(false);
   const [archiveStats, setArchiveStats] = useState({ activeCount: 0, archivedCount: 0 });
-  const [expandedFolderIds, setExpandedFolderIds] = useState([1, 4, 26]); // Auto-expand DCCI root, IT department, and 2026 Projects
+  const [expandedFolderIds, setExpandedFolderIds] = useState([1]); // Auto-expand DCCI root folder by default
 
   // Subfolder creation modal state
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
@@ -170,9 +170,9 @@ export default function ExplorerView({ onNavigateUpload, globalSearch }) {
       if (res.data.status) {
         const list = res.data.data || [];
         setFolders(list);
-        // Default select IT department
-        const it = list.find(f => f.Code === 'IT') || list[0];
-        if (it) setSelectedFolder(it);
+        // Default select DCCI root folder
+        const dcci = list.find(f => f.Code === 'DCCI' || f.ParentId === null) || list[0];
+        if (dcci) setSelectedFolder(dcci);
       }
     } catch (err) {
       console.error('Error loading folders:', err);
