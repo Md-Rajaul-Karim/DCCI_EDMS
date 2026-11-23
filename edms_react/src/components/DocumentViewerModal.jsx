@@ -25,6 +25,7 @@ import {
   Layers
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { SYSTEM_USERS, DEFAULT_USER } from '../constants/systemUsers';
 
 export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 1050, readOnly = false }) {
   const [activeTab, setActiveTab] = useState('metadata'); // 'metadata', 'versions', or 'audit'
@@ -81,6 +82,19 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [doc, onClose]);
 
+  // Get current active user persona
+  const getSimulatedUser = () => {
+    try {
+      const savedId = typeof window !== 'undefined' ? localStorage.getItem('dcci_simulated_user') : null;
+      if (savedId) {
+        const matched = SYSTEM_USERS.find(u => u.id === savedId || u.role === savedId);
+        if (matched) return matched;
+      }
+    } catch {}
+    return DEFAULT_USER;
+  };
+  const activeUser = getSimulatedUser();
+
   // Determine active file details (whether viewing current or a previous version)
   const currentFileName = activeVersion ? (activeVersion.FilePath || '') : (doc.OriginalFileName || doc.Name || '');
   const fileExt = currentFileName.split('.').pop().toLowerCase();
@@ -89,8 +103,8 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
   const isImage = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(fileExt);
 
   const previewStreamUrl = activeVersion 
-    ? `${API_BASE_URL}/Document/StreamVersion?versionId=${activeVersion.Id}`
-    : `${API_BASE_URL}/Document/StreamPdf?id=${doc.Id}`;
+    ? `${API_BASE_URL}/Document/StreamVersion?versionId=${activeVersion.Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`
+    : `${API_BASE_URL}/Document/StreamPdf?id=${doc.Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`;
 
   // If the active file is Excel, parse and render it as an in-browser spreadsheet table!
   useEffect(() => {
@@ -212,8 +226,8 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
     try {
       const targetVersion = v || activeVersion;
       const downloadEndpoint = targetVersion 
-        ? `/Document/DownloadVersion?versionId=${targetVersion.Id}`
-        : `/Document/Download?id=${doc.Id}`;
+        ? `/Document/DownloadVersion?versionId=${targetVersion.Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`
+        : `/Document/Download?id=${doc.Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`;
       
       const targetName = targetVersion ? (targetVersion.FilePath ? targetVersion.FilePath.split('/').pop() : `document_v${targetVersion.VersionNumber}`) : currentFileName;
 
@@ -227,12 +241,20 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
       a.click();
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
+
+      // Auto refresh audit log immediately
+      setTimeout(() => {
+        if (doc?.Id) loadActivityLogs(doc.Id);
+      }, 500);
     } catch (err) {
       console.error('Download error:', err);
       const directUrl = (v || activeVersion)
-        ? `${API_BASE_URL}/Document/DownloadVersion?versionId=${(v || activeVersion).Id}`
-        : `${API_BASE_URL}/Document/Download?id=${doc.Id}`;
+        ? `${API_BASE_URL}/Document/DownloadVersion?versionId=${(v || activeVersion).Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`
+        : `${API_BASE_URL}/Document/Download?id=${doc.Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`;
       window.open(directUrl, '_blank');
+      setTimeout(() => {
+        if (doc?.Id) loadActivityLogs(doc.Id);
+      }, 500);
     }
   };
 

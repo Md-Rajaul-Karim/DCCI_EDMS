@@ -21,6 +21,18 @@ public class DocumentController : ControllerBase
         _connectionString = _config.GetConnectionString("DefaultConnection") ?? "Data Source=edms.db";
     }
 
+    private (string user, string role) GetActingUser()
+    {
+        var user = Request.Query["user"].FirstOrDefault() 
+            ?? Request.Headers["X-User-Name"].FirstOrDefault() 
+            ?? Request.Headers["X-User"].FirstOrDefault() 
+            ?? "Engr. Dilip K Roy";
+        var role = Request.Query["role"].FirstOrDefault() 
+            ?? Request.Headers["X-User-Role"].FirstOrDefault() 
+            ?? "Head of IT";
+        return (user, role);
+    }
+
     private async Task LogActivityAsync(
         SqliteConnection conn, 
         int documentId, 
@@ -510,7 +522,8 @@ public class DocumentController : ControllerBase
                 VALUES (@DocumentId, '1.00', @FilePath, @FileSizeBytes, 'DILIP', 'Initial Document Upload', datetime('now'));
             ", new { DocumentId = docId, FilePath = relativePath, FileSizeBytes = file.Length });
 
-            await LogActivityAsync(conn, docId, meta.Name, "UPLOAD", "Engr. Dilip K Roy", "Head of IT", $"Initial document upload with version v1.00 ({meta.DocumentType})");
+            var (actingUser, actingRole) = GetActingUser();
+            await LogActivityAsync(conn, docId, meta.Name, "UPLOAD", actingUser, actingRole, $"Initial document upload with version v1.00 ({meta.DocumentType})");
 
             return ApiResponse<object>.Success(new { DocumentId = docId, FilePath = relativePath }, "Document uploaded successfully");
         }
@@ -584,7 +597,8 @@ public class DocumentController : ControllerBase
                 Summary = string.IsNullOrWhiteSpace(changeSummary) ? "Version update" : changeSummary
             });
 
-            await LogActivityAsync(conn, documentId, current.Name, "NEW_VERSION", "Engr. Dilip K Roy", "Head of IT", $"New version v{newVersionStr} uploaded: {changeSummary}");
+            var (actingUser, actingRole) = GetActingUser();
+            await LogActivityAsync(conn, documentId, current.Name, "NEW_VERSION", actingUser, actingRole, $"New version v{newVersionStr} uploaded: {changeSummary}");
 
             return ApiResponse<object>.Success(new { Version = newVersionStr, FilePath = relativePath }, "New version uploaded successfully");
         }
@@ -634,7 +648,8 @@ public class DocumentController : ControllerBase
                 request.Id
             });
 
-            await LogActivityAsync(conn, request.Id, request.Name, "UPDATE_META", "Engr. Dilip K Roy", "Head of IT", "Document properties and metadata updated");
+            var (actingUser, actingRole) = GetActingUser();
+            await LogActivityAsync(conn, request.Id, request.Name, "UPDATE_META", actingUser, actingRole, "Document properties and metadata updated");
 
             return ApiResponse<bool>.Success(true, "Metadata updated successfully");
         }
@@ -653,18 +668,19 @@ public class DocumentController : ControllerBase
             await conn.OpenAsync();
 
             var doc = await conn.QueryFirstOrDefaultAsync<DocumentItem>("SELECT * FROM Documents WHERE Id = @Id", new { Id = id });
+            var (actingUser, actingRole) = GetActingUser();
 
             await conn.ExecuteAsync(@"
                 UPDATE Documents
                 SET IsCheckedOut = 1,
-                    CheckedOutBy = 'DILIP',
+                    CheckedOutBy = @User,
                     CheckedOutAt = datetime('now')
                 WHERE Id = @Id
-            ", new { Id = id });
+            ", new { Id = id, User = actingUser });
 
             if (doc != null)
             {
-                await LogActivityAsync(conn, doc.Id, doc.Name, "CHECKOUT", "Engr. Dilip K Roy", "Head of IT", "Document checked out for editing (locked)");
+                await LogActivityAsync(conn, doc.Id, doc.Name, "CHECKOUT", actingUser, actingRole, "Document checked out for editing (locked)");
             }
 
             return ApiResponse<bool>.Success(true, "Document checked out successfully");
@@ -684,6 +700,7 @@ public class DocumentController : ControllerBase
             await conn.OpenAsync();
 
             var doc = await conn.QueryFirstOrDefaultAsync<DocumentItem>("SELECT * FROM Documents WHERE Id = @Id", new { Id = id });
+            var (actingUser, actingRole) = GetActingUser();
 
             await conn.ExecuteAsync(@"
                 UPDATE Documents
@@ -695,7 +712,7 @@ public class DocumentController : ControllerBase
 
             if (doc != null)
             {
-                await LogActivityAsync(conn, doc.Id, doc.Name, "CHECKIN", "Engr. Dilip K Roy", "Head of IT", "Document checked in and unlocked");
+                await LogActivityAsync(conn, doc.Id, doc.Name, "CHECKIN", actingUser, actingRole, "Document checked in and unlocked");
             }
 
             return ApiResponse<bool>.Success(true, "Document checked in successfully");
@@ -741,8 +758,9 @@ public class DocumentController : ControllerBase
                 );
             }
 
+            var (trashUser, trashRole) = GetActingUser();
             await conn.ExecuteAsync("UPDATE Documents SET IsDeleted = 1 WHERE Id = @Id", new { Id = id });
-            await LogActivityAsync(conn, doc.Id, doc.Name, "TRASH", "Engr. Dilip K Roy", "Head of IT", "Document moved to Archive / Trash");
+            await LogActivityAsync(conn, doc.Id, doc.Name, "TRASH", trashUser, trashRole, "Document moved to Archive / Trash");
 
             return ApiResponse<bool>.Success(true, "Document moved to archive/trash");
         }
@@ -765,7 +783,8 @@ public class DocumentController : ControllerBase
 
             if (doc != null)
             {
-                await LogActivityAsync(conn, doc.Id, doc.Name, "RESTORE", "Engr. Dilip K Roy", "Head of IT", "Document restored from Archive / Trash to active folders");
+                var (restoreUser, restoreRole) = GetActingUser();
+                await LogActivityAsync(conn, doc.Id, doc.Name, "RESTORE", restoreUser, restoreRole, "Document restored from Archive / Trash to active folders");
             }
 
             return ApiResponse<bool>.Success(true, "Document restored successfully");
@@ -812,8 +831,7 @@ public class DocumentController : ControllerBase
             var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
             Response.Headers["Content-Disposition"] = $"inline; filename=\"{doc.OriginalFileName}\"";
 
-            var user = Request.Query["user"].FirstOrDefault() ?? Request.Headers["X-User"].FirstOrDefault() ?? "Engr. Dilip K Roy";
-            var role = Request.Query["role"].FirstOrDefault() ?? Request.Headers["X-User-Role"].FirstOrDefault() ?? "Head of IT";
+            var (user, role) = GetActingUser();
             await LogActivityAsync(conn, doc.Id, doc.Name, "VIEW", user, role, "Previewed in secure document viewer");
 
             return File(bytes, contentType);
@@ -861,8 +879,7 @@ public class DocumentController : ControllerBase
             var fileName = Path.GetFileName(version.FilePath);
             Response.Headers["Content-Disposition"] = $"inline; filename=\"{fileName}\"";
 
-            var user = Request.Query["user"].FirstOrDefault() ?? Request.Headers["X-User"].FirstOrDefault() ?? "Engr. Dilip K Roy";
-            var role = Request.Query["role"].FirstOrDefault() ?? Request.Headers["X-User-Role"].FirstOrDefault() ?? "Head of IT";
+            var (user, role) = GetActingUser();
             await LogActivityAsync(conn, version.DocumentId, "Document Version", "VIEW_VERSION", user, role, $"Inspected past version v{version.VersionNumber}");
 
             return File(bytes, contentType);
@@ -909,8 +926,7 @@ public class DocumentController : ControllerBase
             var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
             Response.Headers["Content-Disposition"] = $"attachment; filename=\"{doc.OriginalFileName}\"";
 
-            var user = Request.Query["user"].FirstOrDefault() ?? Request.Headers["X-User"].FirstOrDefault() ?? "Engr. Dilip K Roy";
-            var role = Request.Query["role"].FirstOrDefault() ?? Request.Headers["X-User-Role"].FirstOrDefault() ?? "Head of IT";
+            var (user, role) = GetActingUser();
             await LogActivityAsync(conn, doc.Id, doc.Name, "DOWNLOAD", user, role, $"Downloaded file binary: {doc.OriginalFileName}");
 
             return File(bytes, contentType, doc.OriginalFileName);
@@ -958,8 +974,7 @@ public class DocumentController : ControllerBase
             var fileName = Path.GetFileName(version.FilePath);
             Response.Headers["Content-Disposition"] = $"attachment; filename=\"{fileName}\"";
 
-            var user = Request.Query["user"].FirstOrDefault() ?? Request.Headers["X-User"].FirstOrDefault() ?? "Engr. Dilip K Roy";
-            var role = Request.Query["role"].FirstOrDefault() ?? Request.Headers["X-User-Role"].FirstOrDefault() ?? "Head of IT";
+            var (user, role) = GetActingUser();
             await LogActivityAsync(conn, version.DocumentId, "Document Version", "DOWNLOAD_VERSION", user, role, $"Downloaded past version v{version.VersionNumber}");
 
             return File(bytes, contentType, fileName);
