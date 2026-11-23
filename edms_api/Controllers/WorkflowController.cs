@@ -136,6 +136,189 @@ public class WorkflowController : ControllerBase
         }
     }
 
+    [HttpGet("GetNotifications")]
+    public async Task<ApiResponse<List<object>>> GetNotifications(
+        [FromQuery] string? userRole = null, 
+        [FromQuery] string? userName = null)
+    {
+        try
+        {
+            using var conn = new SqliteConnection(_connectionString);
+            await conn.OpenAsync();
+
+            var notifications = new List<object>();
+            string role = userRole ?? "";
+            string name = userName ?? "";
+
+            // 1. Workflow Cases Actionable for Current Desk
+            var allCases = await conn.QueryAsync<dynamic>(@"
+                SELECT AppId, ProcessName, Subject, TaskName, AppStatus, SentBy, Initiator, Priority, LastModified
+                FROM WorkflowCases
+                ORDER BY Id DESC
+            ");
+
+            foreach (var c in allCases)
+            {
+                string task = ((string)(c.TaskName ?? "")).Trim();
+                string status = ((string)(c.AppStatus ?? "")).Trim();
+                string appId = (string)c.AppId;
+                string process = (string)c.ProcessName;
+                string subject = (string)(c.Subject ?? process);
+                string initiator = (string)(c.Initiator ?? "");
+                string sentBy = (string)(c.SentBy ?? "");
+                string time = (string)(c.LastModified ?? "Just now");
+
+                bool isMyDesk = false;
+                string notifTitle = "";
+                string notifDesc = "";
+
+                if (role.Contains("President", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (task.Contains("President", StringComparison.OrdinalIgnoreCase) && status == "In Progress")
+                    {
+                        isMyDesk = true;
+                        notifTitle = "Action Required: Final Approval";
+                        notifDesc = $"Proposal #{appId} ({subject}) forwarded by {sentBy} is awaiting your final approval.";
+                    }
+                }
+                else if (role.Contains("Secretary General", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (task.Contains("Secretary General", StringComparison.OrdinalIgnoreCase) && status == "In Progress")
+                    {
+                        isMyDesk = true;
+                        notifTitle = "Action Required: SG Review & Forward";
+                        notifDesc = $"Proposal #{appId} ({subject}) is pending on your desk for recommendation.";
+                    }
+                }
+                else if (role.Contains("Accounts", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (task.Contains("Accounts", StringComparison.OrdinalIgnoreCase) && status == "In Progress")
+                    {
+                        isMyDesk = true;
+                        notifTitle = "Action Required: Accounts & Budget Check";
+                        notifDesc = $"Proposal #{appId} ({subject}) submitted for budget & financial vetting.";
+                    }
+                }
+                else if (role.Contains("Head of Department", StringComparison.OrdinalIgnoreCase) || role.Equals("HOD", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (task.Contains("Head of Department", StringComparison.OrdinalIgnoreCase) && status == "In Progress")
+                    {
+                        isMyDesk = true;
+                        notifTitle = "Action Required: HOD Review & Endorsement";
+                        notifDesc = $"Proposal #{appId} ({subject}) submitted by {initiator} is pending your review.";
+                    }
+                }
+                else if (role.Contains("Checker", StringComparison.OrdinalIgnoreCase) || role.Contains("Reviewer", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (task.Contains("Review", StringComparison.OrdinalIgnoreCase) || task.Contains("Checker", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isMyDesk = true;
+                        notifTitle = "Action Required: Technical Review / Checker";
+                        notifDesc = $"Proposal #{appId} ({subject}) has been assigned to you for review.";
+                    }
+                }
+                else if (role.Contains("Initiator", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (status == "Query")
+                    {
+                        isMyDesk = true;
+                        notifTitle = "Clarification / Query Requested";
+                        notifDesc = $"Query raised on your case #{appId} ({subject}). Please provide clarification.";
+                    }
+                    else if (status == "Complete" && (string.IsNullOrEmpty(name) || initiator.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        isMyDesk = true;
+                        notifTitle = "Proposal Approved & Complete";
+                        notifDesc = $"Your proposal #{appId} ({subject}) has received final approval from President.";
+                    }
+                }
+
+                if (isMyDesk)
+                {
+                    notifications.Add(new
+                    {
+                        id = $"wf-{appId}",
+                        type = "workflow",
+                        title = notifTitle,
+                        description = notifDesc,
+                        time = time,
+                        read = false,
+                        targetView = "workflow",
+                        targetId = appId
+                    });
+                }
+            }
+
+            // 2. Document Expiration Warnings (Expiring within 30 days or expired)
+            var expiringDocs = await conn.QueryAsync<dynamic>(@"
+                SELECT Id, Name, SupplierName, ExpiryDate, ActionUponExpiry 
+                FROM Documents 
+                WHERE IsDeleted = 0 
+                  AND ExpiryDate IS NOT NULL 
+                  AND ExpiryDate != ''
+                  AND date(ExpiryDate) <= date('now', '+30 day')
+                ORDER BY ExpiryDate ASC 
+                LIMIT 5
+            ");
+
+            foreach (var doc in expiringDocs)
+            {
+                string expDate = (string)(doc.ExpiryDate ?? "");
+                string docName = (string)(doc.Name ?? "Document");
+                string supplier = (string)(doc.SupplierName ?? "General");
+                string actionExpiry = (string)(doc.ActionUponExpiry ?? "RENEW");
+
+                notifications.Add(new
+                {
+                    id = $"exp-{doc.Id}",
+                    type = "expiry",
+                    title = "Contract Expiration Warning",
+                    description = $"{docName} ({supplier}) expires on {expDate}. Action: {actionExpiry}.",
+                    time = expDate,
+                    read = false,
+                    targetView = "explorer",
+                    targetId = doc.Id.ToString()
+                });
+            }
+
+            // 3. Recent Document Upload / Revisions
+            var recentDocs = await conn.QueryAsync<dynamic>(@"
+                SELECT d.Id, d.Name, d.OriginalFileName, d.Version, d.CreatedAt, f.Name AS FolderName
+                FROM Documents d
+                LEFT JOIN DepartmentFolders f ON d.DepartmentFolderId = f.Id
+                WHERE d.IsDeleted = 0
+                ORDER BY d.Id DESC
+                LIMIT 3
+            ");
+
+            foreach (var rdoc in recentDocs)
+            {
+                string rName = (string)(rdoc.Name ?? "");
+                string folder = (string)(rdoc.FolderName ?? "Archive");
+                string ver = (string)(rdoc.Version ?? "1.00");
+                string created = (string)(rdoc.CreatedAt ?? "Recently");
+
+                notifications.Add(new
+                {
+                    id = $"doc-{rdoc.Id}",
+                    type = "document",
+                    title = "Recent Document Activity",
+                    description = $"{rName} (v{ver}) is active in '{folder}'.",
+                    time = created,
+                    read = false,
+                    targetView = "explorer",
+                    targetId = rdoc.Id.ToString()
+                });
+            }
+
+            return ApiResponse<List<object>>.Success(notifications, "Notifications loaded successfully");
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse<List<object>>.Fail($"Error loading notifications: {ex.Message}");
+        }
+    }
+
     [HttpPost("ExecuteAction")]
     public async Task<ApiResponse<object>> ExecuteAction([FromBody] WorkflowActionRequest req)
     {

@@ -18,6 +18,7 @@ import {
   Check
 } from 'lucide-react';
 import { SYSTEM_USERS } from '../constants/systemUsers';
+import Api from '../api';
 
 export default function Header({ currentView, setCurrentView, globalSearch, setGlobalSearch, currentUser, onSelectUser }) {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -25,35 +26,38 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
   const dropdownRef = useRef(null);
   const userDropdownRef = useRef(null);
 
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: 'workflow',
-      title: 'Action Required: Pending Proposal',
-      description: 'Pre-Approval Sheet #7566940683 (CCTV Security System) assigned to your desk for HOD review.',
-      time: '15m ago',
-      read: false,
-      targetView: 'workflow'
-    },
-    {
-      id: 2,
-      type: 'document',
-      title: 'Document Revision Notice',
-      description: 'Write-off-Damage Report has been updated to v2.00 in the IT Department folder.',
-      time: '1h ago',
-      read: false,
-      targetView: 'explorer'
-    },
-    {
-      id: 3,
-      type: 'expiry',
-      title: 'Contract Expiration Warning',
-      description: 'SMS Agreement 2025 (Software Shop Limited) is due for renewal review.',
-      time: 'Yesterday',
-      read: false,
-      targetView: 'explorer'
+  const [notifications, setNotifications] = useState([]);
+  const [readIds, setReadIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dcci_read_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
-  ]);
+  });
+
+  const fetchNotifications = async () => {
+    try {
+      if (!currentUser) return;
+      const res = await Api.get(`/Workflow/GetNotifications?userRole=${encodeURIComponent(currentUser.role || '')}&userName=${encodeURIComponent(currentUser.name || '')}`);
+      if (res?.data?.success && Array.isArray(res.data.data)) {
+        const raw = res.data.data;
+        const mapped = raw.map(n => ({
+          ...n,
+          read: readIds.includes(n.id)
+        }));
+        setNotifications(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load notifications", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
+    return () => clearInterval(interval);
+  }, [currentUser, readIds]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -72,11 +76,19 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
   }, []);
 
   const handleMarkAllRead = () => {
+    const allIds = notifications.map(n => n.id);
+    const updated = Array.from(new Set([...readIds, ...allIds]));
+    setReadIds(updated);
+    localStorage.setItem('dcci_read_notifications', JSON.stringify(updated));
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
   const handleNotificationClick = (item) => {
-    // Mark as read
+    if (!readIds.includes(item.id)) {
+      const updated = [...readIds, item.id];
+      setReadIds(updated);
+      localStorage.setItem('dcci_read_notifications', JSON.stringify(updated));
+    }
     setNotifications(prev => prev.map(n => n.id === item.id ? { ...n, read: true } : n));
     setShowNotifications(false);
     if (item.targetView) {
@@ -190,44 +202,52 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
 
               {/* Notification List */}
               <div className="p-0">
-                {notifications.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`p-3 border-bottom d-flex gap-2 align-items-start ${!item.read ? 'bg-light bg-opacity-50' : ''}`}
-                    style={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
-                    onClick={() => handleNotificationClick(item)}
-                  >
-                    <div className="mt-1">
-                      {item.type === 'workflow' && <GitBranch size={16} className="text-primary" />}
-                      {item.type === 'document' && <FileText size={16} className="text-success" />}
-                      {item.type === 'expiry' && <AlertCircle size={16} className="text-warning" />}
-                    </div>
-
-                    <div className="flex-grow-1">
-                      <div className="d-flex align-items-center justify-content-between mb-1">
-                        <span className={`small fw-bold ${!item.read ? 'text-dark' : 'text-secondary'}`}>
-                          {item.title}
-                        </span>
-                        {!item.read && (
-                          <span className="badge bg-success rounded-pill" style={{ width: '8px', height: '8px', padding: 0 }}></span>
-                        )}
-                      </div>
-                      
-                      <p className="small text-muted mb-1 lh-sm" style={{ fontSize: '0.78rem' }}>
-                        {item.description}
-                      </p>
-
-                      <div className="d-flex align-items-center justify-content-between">
-                        <small className="text-muted" style={{ fontSize: '0.7rem' }}>
-                          <Clock size={11} className="me-1" /> {item.time}
-                        </small>
-                        <span className="badge bg-light text-primary border" style={{ fontSize: '0.65rem' }}>
-                          Click to View &rarr;
-                        </span>
-                      </div>
-                    </div>
+                {notifications.length === 0 ? (
+                  <div className="p-4 text-center text-muted">
+                    <Bell size={28} className="text-secondary opacity-50 mb-2 d-block mx-auto" />
+                    <div className="small fw-semibold text-secondary">No New Notifications</div>
+                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>Your desk is currently up to date!</div>
                   </div>
-                ))}
+                ) : (
+                  notifications.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`p-3 border-bottom d-flex gap-2 align-items-start ${!item.read ? 'bg-light bg-opacity-50' : ''}`}
+                      style={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
+                      onClick={() => handleNotificationClick(item)}
+                    >
+                      <div className="mt-1">
+                        {item.type === 'workflow' && <GitBranch size={16} className="text-primary" />}
+                        {item.type === 'document' && <FileText size={16} className="text-success" />}
+                        {item.type === 'expiry' && <AlertCircle size={16} className="text-warning" />}
+                      </div>
+
+                      <div className="flex-grow-1">
+                        <div className="d-flex align-items-center justify-content-between mb-1">
+                          <span className={`small fw-bold ${!item.read ? 'text-dark' : 'text-secondary'}`}>
+                            {item.title}
+                          </span>
+                          {!item.read && (
+                            <span className="badge bg-success rounded-pill" style={{ width: '8px', height: '8px', padding: 0 }}></span>
+                          )}
+                        </div>
+                        
+                        <p className="small text-muted mb-1 lh-sm" style={{ fontSize: '0.78rem' }}>
+                          {item.description}
+                        </p>
+
+                        <div className="d-flex align-items-center justify-content-between">
+                          <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                            <Clock size={11} className="me-1" /> {item.time}
+                          </small>
+                          <span className="badge bg-light text-primary border" style={{ fontSize: '0.65rem' }}>
+                            Click to View &rarr;
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               <div className="p-2 text-center bg-light border-top">
