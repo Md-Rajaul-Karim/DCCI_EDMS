@@ -179,8 +179,26 @@ public class WorkflowController : ControllerBase
                 }
                 else
                 {
-                    newTaskName = "Accounts & Finance";
-                    newStatus = "In Progress";
+                    if (req.Role.Contains("President", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newTaskName = "Completed";
+                        newStatus = "Complete";
+                    }
+                    else if (req.Role.Contains("Secretary General", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newTaskName = "President Approval";
+                        newStatus = "In Progress";
+                    }
+                    else if (req.Role.Contains("Accounts", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newTaskName = "Secretary General";
+                        newStatus = "In Progress";
+                    }
+                    else
+                    {
+                        newTaskName = "Accounts & Finance";
+                        newStatus = "In Progress";
+                    }
                 }
             }
             else if (req.Action.Equals("Query", StringComparison.OrdinalIgnoreCase))
@@ -193,9 +211,10 @@ public class WorkflowController : ControllerBase
                 newTaskName = "Head of Department";
                 newStatus = "In Progress";
             }
-            else if (req.Action.Equals("Forward", StringComparison.OrdinalIgnoreCase))
+            else if (req.Action.Equals("Review", StringComparison.OrdinalIgnoreCase) || req.Action.Equals("Forward", StringComparison.OrdinalIgnoreCase))
             {
-                newTaskName = "Reviewer Review";
+                string target = !string.IsNullOrWhiteSpace(req.TargetRole) ? req.TargetRole : "Internal Reviewer";
+                newTaskName = $"Review ({target})";
                 newStatus = "In Progress";
             }
             else if (req.Action.Equals("Reject", StringComparison.OrdinalIgnoreCase))
@@ -226,6 +245,18 @@ public class WorkflowController : ControllerBase
                 ", new { AttachmentsJson = req.AttachmentsJson, AppId = req.AppId });
             }
 
+            string commentText = req.Comments;
+            if (req.Action.Equals("Review", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(req.TargetRole))
+            {
+                commentText = string.IsNullOrWhiteSpace(commentText)
+                    ? $"Forwarded for Review to {req.TargetRole}"
+                    : $"[Forwarded for Review to {req.TargetRole}] {commentText}";
+            }
+            else if (string.IsNullOrEmpty(commentText))
+            {
+                commentText = $"{req.Action} without additional remarks";
+            }
+
             await conn.ExecuteAsync(@"
                 INSERT INTO WorkflowActionHistory (CaseAppId, ActionType, FromUser, FromRole, Comments, ActionDate)
                 VALUES (@CaseAppId, @ActionType, @FromUser, @FromRole, @Comments, @ActionDate);
@@ -235,7 +266,7 @@ public class WorkflowController : ControllerBase
                 ActionType = req.Action,
                 FromUser = req.PerformedBy,
                 FromRole = req.Role,
-                Comments = string.IsNullOrEmpty(req.Comments) ? $"{req.Action} without additional remarks" : req.Comments,
+                Comments = commentText,
                 ActionDate = timeStr
             });
 
@@ -317,9 +348,10 @@ public class WorkflowController : ControllerBase
 public class WorkflowActionRequest
 {
     public string AppId { get; set; } = string.Empty;
-    public string Action { get; set; } = string.Empty; // "Approve", "Query", "Clarify", "Forward", "Reject"
+    public string Action { get; set; } = string.Empty; // "Approve", "Query", "Clarify", "Review", "Forward", "Reject"
     public string PerformedBy { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
     public string Comments { get; set; } = string.Empty;
     public string? AttachmentsJson { get; set; } = null;
+    public string? TargetRole { get; set; } = null;
 }

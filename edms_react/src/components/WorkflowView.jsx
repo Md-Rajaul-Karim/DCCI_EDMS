@@ -270,60 +270,101 @@ export default function WorkflowView() {
     }
   };
 
-  const handleExecuteAction = async (actionType) => {
-    if ((actionType === 'Query' || actionType === 'Reject' || actionType === 'Clarify') && !actionComments.trim()) {
+  const handleReviewAction = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Send for Internal Review',
+      html: `
+        <div class="text-start mb-2">
+          <label class="form-label small fw-bold text-dark">Select Target Reviewer / Department:</label>
+          <select id="swal-target-role" class="form-select form-select-sm mb-3">
+            <option value="Accounts & Finance">Accounts & Finance (CFO)</option>
+            <option value="Head of Department">Head of Department (Dilip Roy)</option>
+            <option value="Secretary General">Secretary General (SG)</option>
+            <option value="President of DCCI">President of DCCI</option>
+            <option value="Legal Cell">Legal Cell</option>
+            <option value="Internal Audit Cell">Internal Audit Cell</option>
+            <option value="Checker (Officer IT)">Checker (Officer IT)</option>
+          </select>
+          <label class="form-label small fw-bold text-dark">Review Instructions / Note (নোট বা পরামর্শ):</label>
+          <textarea id="swal-review-notes" class="form-control form-control-sm" rows="3" placeholder="Specify review remarks or queries...">${actionComments || ''}</textarea>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Send for Review',
+      confirmButtonColor: '#0d6efd',
+      cancelButtonText: 'Cancel',
+      preConfirm: () => {
+        const targetRole = document.getElementById('swal-target-role').value;
+        const reviewNotes = document.getElementById('swal-review-notes').value;
+        return { targetRole, reviewNotes };
+      }
+    });
+
+    if (formValues) {
+      await handleExecuteAction('Review', formValues.targetRole, formValues.reviewNotes);
+    }
+  };
+
+  const handleExecuteAction = async (actionType, targetRole = null, customComments = null) => {
+    const finalComments = customComments !== null ? customComments : actionComments;
+
+    if ((actionType === 'Query' || actionType === 'Reject' || actionType === 'Clarify') && !finalComments.trim()) {
       Swal.fire('Comments Required', `Please write remarks or clarification details before submitting.`, 'warning');
       return;
     }
 
-    const confirm = await Swal.fire({
-      title: actionType === 'Clarify' ? 'Submit Clarification?' : `${actionType} Application?`,
-      text: actionType === 'Clarify' 
-        ? `Submit your written explanation for Application #${selectedCase.AppId} and return to Approver?`
-        : `Are you sure you want to perform "${actionType}" on Application #${selectedCase.AppId}?`,
-      icon: actionType === 'Reject' ? 'warning' : actionType === 'Clarify' ? 'info' : 'question',
-      showCancelButton: true,
-      confirmButtonColor: actionType === 'Reject' ? '#dc3545' : actionType === 'Query' ? '#ffc107' : '#198754',
-      confirmButtonText: actionType === 'Clarify' ? 'Yes, Submit Clarification' : `Yes, ${actionType}`
-    });
+    if (actionType !== 'Review') {
+      const confirm = await Swal.fire({
+        title: actionType === 'Clarify' ? 'Submit Clarification?' : `${actionType} Application?`,
+        text: actionType === 'Clarify' 
+          ? `Submit your written explanation for Application #${selectedCase.AppId} and return to Approver?`
+          : `Are you sure you want to perform "${actionType}" on Application #${selectedCase.AppId}?`,
+        icon: actionType === 'Reject' ? 'warning' : actionType === 'Clarify' ? 'info' : 'question',
+        showCancelButton: true,
+        confirmButtonColor: actionType === 'Reject' ? '#dc3545' : actionType === 'Query' ? '#ffc107' : '#198754',
+        confirmButtonText: actionType === 'Clarify' ? 'Yes, Submit Clarification' : `Yes, ${actionType}`
+      });
 
-    if (confirm.isConfirmed) {
-      try {
-        setIsActing(true);
-        const performer = actionType === 'Clarify' ? (selectedCase.Initiator || 'Md. Arman Hossen') : actingUser;
-        const perfRole = actionType === 'Clarify' ? (selectedCase.Designation || 'Senior Officer (Initiator)') : actingRole;
+      if (!confirm.isConfirmed) return;
+    }
 
-        const res = await Api.post('/Workflow/ExecuteAction', {
-          AppId: selectedCase.AppId,
-          Action: actionType,
-          PerformedBy: performer,
-          Role: perfRole,
-          Comments: actionComments
+    try {
+      setIsActing(true);
+      const performer = actionType === 'Clarify' ? (selectedCase.Initiator || 'Md. Arman Hossen') : actingUser;
+      const perfRole = actionType === 'Clarify' ? (selectedCase.Designation || 'Senior Officer (Initiator)') : actingRole;
+
+      const res = await Api.post('/Workflow/ExecuteAction', {
+        AppId: selectedCase.AppId,
+        Action: actionType,
+        PerformedBy: performer,
+        Role: perfRole,
+        Comments: finalComments,
+        TargetRole: targetRole
+      });
+
+      if (res.data.status) {
+        Swal.fire({
+          icon: 'success',
+          title: actionType === 'Clarify' ? 'Clarification Submitted!' : actionType === 'Review' ? 'Forwarded for Review!' : `Action: ${actionType} Successful`,
+          text: res.data.message,
+          timer: 2000,
+          showConfirmButton: false
         });
-
-        if (res.data.status) {
-          Swal.fire({
-            icon: 'success',
-            title: actionType === 'Clarify' ? 'Clarification Submitted!' : `Action: ${actionType} Successful`,
-            text: res.data.message,
-            timer: 2000,
-            showConfirmButton: false
-          });
-          setActionComments('');
-          // Refresh details and cases
-          const updatedRes = await Api.get(`/Workflow/GetCaseById?appId=${selectedCase.AppId}`);
-          if (updatedRes.data.status && updatedRes.data.data) {
-            setSelectedCase(updatedRes.data.data);
-          }
-          loadCases();
-          loadBucketCounts();
-          loadActionHistory(selectedCase.AppId);
+        setActionComments('');
+        // Refresh details and cases
+        const updatedRes = await Api.get(`/Workflow/GetCaseById?appId=${selectedCase.AppId}`);
+        if (updatedRes.data.status && updatedRes.data.data) {
+          setSelectedCase(updatedRes.data.data);
         }
-      } catch (err) {
-        Swal.fire('Error', err.message, 'error');
-      } finally {
-        setIsActing(false);
+        loadCases();
+        loadBucketCounts();
+        loadActionHistory(selectedCase.AppId);
       }
+    } catch (err) {
+      Swal.fire('Error', err.message, 'error');
+    } finally {
+      setIsActing(false);
     }
   };
 
@@ -869,7 +910,7 @@ export default function WorkflowView() {
                             <div className="d-flex align-items-center gap-2">
                               <span className="fw-bold text-dark">{item.FromUser}</span>
                               <span className="badge bg-secondary" style={{ fontSize: '0.7rem' }}>{item.FromRole}</span>
-                              <span className={`badge ${item.ActionType === 'Approve' ? 'bg-success' : item.ActionType === 'Query' ? 'bg-warning text-dark' : item.ActionType === 'Reject' ? 'bg-danger' : 'bg-info text-dark'}`} style={{ fontSize: '0.7rem' }}>
+                              <span className={`badge ${item.ActionType === 'Approve' ? 'bg-success' : item.ActionType === 'Query' ? 'bg-warning text-dark' : item.ActionType === 'Reject' ? 'bg-danger' : item.ActionType === 'Review' ? 'bg-primary' : 'bg-info text-dark'}`} style={{ fontSize: '0.7rem' }}>
                                 {item.ActionType}
                               </span>
                             </div>
@@ -987,10 +1028,11 @@ export default function WorkflowView() {
                       <button 
                         type="button" 
                         className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
-                        onClick={() => handleExecuteAction('Forward')}
+                        onClick={handleReviewAction}
                         disabled={isActing}
+                        title="Send to a specific officer or cell for internal review"
                       >
-                        <Send size={14} /> Forward
+                        <Eye size={14} /> Review
                       </button>
 
                       <button 

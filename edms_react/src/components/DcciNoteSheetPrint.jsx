@@ -230,11 +230,12 @@ export default function DcciNoteSheetPrint({ caseData, actionHistory = [], attac
                 const isApproved = item.ActionType === 'Approve';
                 const isQuery = item.ActionType === 'Query';
                 const isClarified = item.ActionType === 'Clarified' || item.ActionType === 'Clarify';
+                const isReview = item.ActionType === 'Review' || item.ActionType === 'Forward';
                 const isChecked = item.ActionType === 'Checked';
                 const isSubmitted = item.ActionType === 'Submitted';
 
-                const sealColor = isApproved ? '#0b7337' : isQuery ? '#d97706' : isClarified ? '#0284c7' : '#4b5563';
-                const sealBg = isApproved ? '#f0fdf4' : isQuery ? '#fffbeb' : isClarified ? '#f0f9ff' : '#f9fafb';
+                const sealColor = isApproved ? '#0b7337' : isQuery ? '#d97706' : isClarified ? '#0284c7' : isReview ? '#4f46e5' : '#4b5563';
+                const sealBg = isApproved ? '#f0fdf4' : isQuery ? '#fffbeb' : isClarified ? '#f0f9ff' : isReview ? '#eef2ff' : '#f9fafb';
 
                 return (
                   <div 
