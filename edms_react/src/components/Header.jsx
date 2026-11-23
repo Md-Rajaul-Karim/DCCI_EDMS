@@ -40,7 +40,7 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
     try {
       if (!currentUser) return;
       const res = await Api.get(`/Workflow/GetNotifications?userRole=${encodeURIComponent(currentUser.role || '')}&userName=${encodeURIComponent(currentUser.name || '')}`);
-      if (res?.data?.success && Array.isArray(res.data.data)) {
+      if (res?.data?.status && Array.isArray(res.data.data)) {
         const raw = res.data.data;
         const mapped = raw.map(n => ({
           ...n,
