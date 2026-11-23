@@ -338,16 +338,22 @@ export default function WorkflowView({ currentUser }) {
     if (actionType !== 'Review') {
       let confirmText = `Are you sure you want to perform "${actionType}" on Application #${selectedCase.AppId}?`;
       if (actionType === 'Approve') {
-        const destText = 
-          actingRole === 'Head of Department' ? 'Accounts & Finance (CFO)' :
-          actingRole === 'Accounts & Finance' ? 'Secretary General (SG)' :
-          actingRole === 'Secretary General' ? 'President of DCCI' :
-          actingRole === 'President' ? 'Final Completion (চূড়ান্ত অনুমোদন)' : 'Next Stage';
-        confirmText = `Approve Application #${selectedCase.AppId} and forward to ${destText}?`;
+        if (selectedCase?.TaskName?.toLowerCase().startsWith('review')) {
+          const lastReviewAction = [...actionHistory].reverse().find(a => a.ActionType === 'Review');
+          const returnRole = lastReviewAction?.FromRole || 'Calling Authority';
+          confirmText = `Submit your review observations and return Application #${selectedCase.AppId} to ${returnRole}?`;
+        } else {
+          const destText = 
+            actingRole === 'Head of Department' ? 'Accounts & Finance (CFO)' :
+            actingRole === 'Accounts & Finance' ? 'Secretary General (SG)' :
+            actingRole === 'Secretary General' ? 'President of DCCI' :
+            actingRole === 'President' ? 'Final Completion (চূড়ান্ত অনুমোদন)' : 'Next Stage';
+          confirmText = `Approve Application #${selectedCase.AppId} and forward to ${destText}?`;
+        }
       }
 
       const confirm = await Swal.fire({
-        title: actionType === 'Clarify' ? 'Submit Clarification?' : actionType === 'Approve' && actingRole === 'President' ? 'Final Approval?' : `${actionType} Application?`,
+        title: actionType === 'Clarify' ? 'Submit Clarification?' : (selectedCase?.TaskName?.toLowerCase().startsWith('review') && actionType === 'Approve') ? 'Return Review Feedback?' : actionType === 'Approve' && actingRole === 'President' ? 'Final Approval?' : `${actionType} Application?`,
         text: actionType === 'Clarify' 
           ? `Submit your written explanation for Application #${selectedCase.AppId} and return to Approver?`
           : confirmText,
@@ -376,11 +382,22 @@ export default function WorkflowView({ currentUser }) {
 
       if (res.data.status) {
         const nextInfo = res.data?.data?.NewTaskName ? ` (Next Desk: ${res.data.data.NewTaskName})` : '';
+        let successTitle = 'Approved & Forwarded!';
+        if (actionType === 'Clarify') {
+          successTitle = 'Clarification Submitted!';
+        } else if (actionType === 'Review') {
+          successTitle = 'Forwarded for Review!';
+        } else if (selectedCase?.TaskName?.toLowerCase().startsWith('review')) {
+          successTitle = `Review Feedback Returned to ${res.data?.data?.NewTaskName || 'Calling Authority'}!`;
+        } else if (actionType === 'Approve' && actingRole === 'President') {
+          successTitle = 'Approved & Completed!';
+        }
+
         Swal.fire({
           icon: 'success',
-          title: actionType === 'Clarify' ? 'Clarification Submitted!' : actionType === 'Review' ? 'Forwarded for Review!' : actionType === 'Approve' && actingRole === 'President' ? 'Approved & Completed!' : 'Approved & Forwarded!',
+          title: successTitle,
           text: (res.data.message || '') + nextInfo,
-          timer: 2200,
+          timer: 2400,
           showConfirmButton: false
         });
         setActionComments('');
@@ -1119,12 +1136,22 @@ export default function WorkflowView({ currentUser }) {
 
                       <button 
                         type="button" 
-                        className={`btn btn-sm ${actingRole === 'President' ? 'btn-danger' : 'btn-success'} px-3 d-flex align-items-center gap-1 fw-bold`}
+                        className={`btn btn-sm ${actingRole === 'President' ? 'btn-danger' : selectedCase?.TaskName?.toLowerCase().startsWith('review') ? 'btn-primary' : 'btn-success'} px-3 d-flex align-items-center gap-1 fw-bold`}
                         onClick={() => handleExecuteAction('Approve')}
                         disabled={isActing}
                         title={`Approve and forward according to DCCI workflow hierarchy`}
                       >
-                        {actingRole === 'President' ? (
+                        {selectedCase?.TaskName?.toLowerCase().startsWith('review') ? (
+                          (() => {
+                            const lastRev = [...actionHistory].reverse().find(a => a.ActionType === 'Review');
+                            const returnTo = lastRev?.FromRole || 'Secretary General';
+                            return (
+                              <>
+                                <Check size={16} /> Submit Review & Return to {returnTo}
+                              </>
+                            );
+                          })()
+                        ) : actingRole === 'President' ? (
                           <>
                             <CheckCircle2 size={16} /> Final Approve & Complete (চূড়ান্ত অনুমোদন)
                           </>
