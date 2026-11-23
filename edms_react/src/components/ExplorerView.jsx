@@ -636,6 +636,14 @@ export default function ExplorerView({ onNavigateUpload, globalSearch }) {
                         </span>
                       </div>
 
+                      {/* File No and Note No */}
+                      {(doc.FileNo || doc.NoteNo) && (
+                        <div className="small text-muted mb-1 text-truncate" style={{ fontSize: '0.72rem' }}>
+                          {doc.FileNo && <span className="me-2" title={`File No: ${doc.FileNo}`}>📁 <strong className="text-secondary">{doc.FileNo}</strong></span>}
+                          {doc.NoteNo && <span title={`Note No: ${doc.NoteNo}`}>📝 <strong className="text-secondary">{doc.NoteNo}</strong></span>}
+                        </div>
+                      )}
+
                       <div className="text-truncate mb-2">
                         {tags.map((t, idx) => (
                           <span key={idx} className="tag-badge">{t.trim()}</span>
@@ -669,6 +677,8 @@ export default function ExplorerView({ onNavigateUpload, globalSearch }) {
               <thead className="table-light small text-uppercase text-secondary">
                 <tr>
                   <th>Document Name</th>
+                  <th>File No</th>
+                  <th>Note No</th>
                   <th>Type</th>
                   <th>Supplier / Party</th>
                   <th>Version</th>
@@ -690,6 +700,24 @@ export default function ExplorerView({ onNavigateUpload, globalSearch }) {
                             <small className="text-muted">{doc.OriginalFileName}</small>
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        {doc.FileNo ? (
+                          <span className="badge bg-light text-dark border font-monospace" style={{ fontSize: '0.78rem' }}>
+                            {doc.FileNo}
+                          </span>
+                        ) : (
+                          <span className="text-muted small">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {doc.NoteNo ? (
+                          <span className="badge bg-light text-dark border font-monospace" style={{ fontSize: '0.78rem' }}>
+                            {doc.NoteNo}
+                          </span>
+                        ) : (
+                          <span className="text-muted small">—</span>
+                        )}
                       </td>
                       <td>
                         <span className="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
