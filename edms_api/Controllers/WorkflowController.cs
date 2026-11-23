@@ -400,11 +400,38 @@ public class WorkflowController : ControllerBase
         }
     }
 
+    [HttpDelete("DeleteCase")]
+    public async Task<ApiResponse<bool>> DeleteCase([FromQuery] string appId)
+    {
+        try
+        {
+            using var conn = new SqliteConnection(_connectionString);
+            await conn.OpenAsync();
+
+            await conn.ExecuteAsync("DELETE FROM WorkflowCases WHERE AppId = @AppId", new { AppId = appId });
+            await conn.ExecuteAsync("DELETE FROM WorkflowActionHistory WHERE CaseAppId = @AppId", new { AppId = appId });
+
+            return ApiResponse<bool>.Success(true, $"Case #{appId} deleted successfully");
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse<bool>.Fail(ex.Message);
+        }
+    }
+
     [HttpPost("CreateApplication")]
     public async Task<ApiResponse<string>> CreateApplication([FromBody] WorkflowCase model)
     {
         try
         {
+            // Only Initiators can create proposals
+            if (!string.IsNullOrEmpty(model.Designation) && 
+                (model.Designation.Contains("President", StringComparison.OrdinalIgnoreCase) || 
+                 model.Designation.Contains("Secretary General", StringComparison.OrdinalIgnoreCase) ||
+                 model.Designation.Contains("Chief Accounts", StringComparison.OrdinalIgnoreCase)))
+            {
+                return ApiResponse<string>.Fail("Only Initiators are authorized to draft and submit new applications.");
+            }
             using var conn = new SqliteConnection(_connectionString);
             await conn.OpenAsync();
 

@@ -534,12 +534,30 @@ export default function WorkflowView({ currentUser }) {
       {/* Left Sidebar Case Buckets (Matches Dilip demo exact layout) */}
       <div className="tree-sidebar d-flex flex-column justify-content-between" style={{ width: '270px', flexShrink: 0 }}>
         <div>
-          <button 
-            className="btn btn-success w-100 mb-3 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
-            onClick={() => setShowCreateModal(true)}
-          >
-            <Plus size={18} /> New Application
-          </button>
+          {currentUser?.role === 'Initiator' ? (
+            <button 
+              className="btn btn-success w-100 mb-3 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
+              onClick={() => setShowCreateModal(true)}
+            >
+              <Plus size={18} /> New Application
+            </button>
+          ) : (
+            <button 
+              className="btn btn-outline-secondary w-100 mb-3 d-flex align-items-center justify-content-center gap-1 small"
+              style={{ opacity: 0.7, cursor: 'not-allowed', fontSize: '0.82rem' }}
+              title="নতুন আবেদন শুধুমাত্র Initiator তৈরি করতে পারেন। নতুন আবেদন করতে টপবারে ইনিশিয়েটর নির্বাচন করুন।"
+              onClick={() => {
+                Swal.fire({
+                  icon: 'info',
+                  title: 'Initiator Desk Only',
+                  text: 'নতুন প্রস্তাবনা বা রিকুইজিশন শুধুমাত্র আবেদনকারী (Initiator) তৈরি করতে পারেন। নতুন আবেদন দাখিল করতে অনুগ্রহ করে টপবারে Initiator (Md. Arman Hossen) ডেস্ক নির্বাচন করুন।'
+                });
+              }}
+            >
+              <Plus size={15} /> New Application
+              <span className="badge bg-secondary ms-1" style={{ fontSize: '0.62rem' }}>Initiator Only</span>
+            </button>
+          )}
 
           <div className="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
             <span className="fw-bold text-success small text-uppercase">Workflow Buckets</span>
@@ -672,9 +690,15 @@ export default function WorkflowView({ currentUser }) {
             <Inbox size={48} className="text-muted mb-2 opacity-50" />
             <h6 className="fw-semibold text-secondary">No cases in {activeBucket}</h6>
             <p className="small text-muted mb-3">You can submit a new proposal or select another bucket from the left sidebar.</p>
-            <button className="btn btn-sm btn-success" onClick={() => setShowCreateModal(true)}>
-              <Plus size={14} className="me-1" /> New Application
-            </button>
+            {currentUser?.role === 'Initiator' ? (
+              <button className="btn btn-sm btn-success" onClick={() => setShowCreateModal(true)}>
+                <Plus size={14} className="me-1" /> New Application
+              </button>
+            ) : (
+              <span className="badge bg-light text-secondary border p-2">
+                Switch to Initiator desk to create a new application
+              </span>
+            )}
           </div>
         )}
 
