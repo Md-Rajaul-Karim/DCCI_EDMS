@@ -157,39 +157,52 @@ public class WorkflowController : ControllerBase
 
             if (req.Action.Equals("Approve", StringComparison.OrdinalIgnoreCase))
             {
-                if (caseItem.TaskName.Contains("Head of Department", StringComparison.OrdinalIgnoreCase))
-                {
-                    newTaskName = "Accounts & Finance";
-                    newStatus = "In Progress";
-                }
-                else if (caseItem.TaskName.Contains("Accounts", StringComparison.OrdinalIgnoreCase))
-                {
-                    newTaskName = "Secretary General";
-                    newStatus = "In Progress";
-                }
-                else if (caseItem.TaskName.Contains("Secretary General", StringComparison.OrdinalIgnoreCase))
-                {
-                    newTaskName = "President Approval";
-                    newStatus = "In Progress";
-                }
-                else if (caseItem.TaskName.Contains("President", StringComparison.OrdinalIgnoreCase))
+                // Strict 5-step DCCI Approval Chain:
+                // 1. Initiator (Md. Arman Hossen) -> 2. Head of Department
+                // 2. Head of Department (Engr. Dilip K Roy) -> 3. Accounts & Finance
+                // 3. Accounts & Finance (CFO / CAO) -> 4. Secretary General
+                // 4. Secretary General (SG) -> 5. President Approval
+                // 5. President of DCCI -> Completed (Final Approval)
+
+                if (req.Role.Contains("President", StringComparison.OrdinalIgnoreCase))
                 {
                     newTaskName = "Completed";
                     newStatus = "Complete";
                 }
+                else if (req.Role.Contains("Secretary General", StringComparison.OrdinalIgnoreCase))
+                {
+                    newTaskName = "President Approval";
+                    newStatus = "In Progress";
+                }
+                else if (req.Role.Contains("Accounts", StringComparison.OrdinalIgnoreCase))
+                {
+                    newTaskName = "Secretary General";
+                    newStatus = "In Progress";
+                }
+                else if (req.Role.Contains("Head of Department", StringComparison.OrdinalIgnoreCase))
+                {
+                    newTaskName = "Accounts & Finance";
+                    newStatus = "In Progress";
+                }
+                else if (req.Role.Contains("Initiator", StringComparison.OrdinalIgnoreCase))
+                {
+                    newTaskName = "Head of Department";
+                    newStatus = "In Progress";
+                }
                 else
                 {
-                    if (req.Role.Contains("President", StringComparison.OrdinalIgnoreCase))
+                    // Fallback to check current task if role is generic
+                    if (caseItem.TaskName.Contains("President", StringComparison.OrdinalIgnoreCase))
                     {
                         newTaskName = "Completed";
                         newStatus = "Complete";
                     }
-                    else if (req.Role.Contains("Secretary General", StringComparison.OrdinalIgnoreCase))
+                    else if (caseItem.TaskName.Contains("Secretary General", StringComparison.OrdinalIgnoreCase))
                     {
                         newTaskName = "President Approval";
                         newStatus = "In Progress";
                     }
-                    else if (req.Role.Contains("Accounts", StringComparison.OrdinalIgnoreCase))
+                    else if (caseItem.TaskName.Contains("Accounts", StringComparison.OrdinalIgnoreCase))
                     {
                         newTaskName = "Secretary General";
                         newStatus = "In Progress";

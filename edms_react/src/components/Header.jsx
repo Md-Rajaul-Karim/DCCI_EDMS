@@ -13,12 +13,17 @@ import {
   FileText,
   AlertCircle,
   ExternalLink,
-  X
+  X,
+  ChevronDown,
+  Check
 } from 'lucide-react';
+import { SYSTEM_USERS } from '../constants/systemUsers';
 
-export default function Header({ currentView, setCurrentView, globalSearch, setGlobalSearch }) {
+export default function Header({ currentView, setCurrentView, globalSearch, setGlobalSearch, currentUser, onSelectUser }) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const dropdownRef = useRef(null);
+  const userDropdownRef = useRef(null);
 
   const [notifications, setNotifications] = useState([
     {
@@ -52,11 +57,14 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowNotifications(false);
+      }
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
+        setShowUserMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -235,23 +243,108 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
           )}
         </div>
 
-        {/* User Chip */}
-        <div className="d-flex align-items-center gap-2 bg-white bg-opacity-10 px-2 py-1 rounded">
-          <div style={{
-            background: 'white',
-            color: '#0b7337',
-            width: '26px',
-            height: '26px',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.75rem',
-            fontWeight: 700
-          }}>
-            ER
-          </div>
-          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Engr. Dilip K Roy</span>
+        {/* User Persona Switcher Dropdown (Simulation Mode) */}
+        <div className="position-relative" ref={userDropdownRef}>
+          <button 
+            type="button"
+            className="btn p-1 px-2 d-flex align-items-center gap-2 rounded border-0 text-white"
+            style={{ 
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              transition: 'background-color 0.2s',
+              cursor: 'pointer'
+            }}
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            title="Click to switch active user role / desk"
+          >
+            <div style={{
+              background: currentUser?.color || '#0b7337',
+              color: '#ffffff',
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              border: '2px solid rgba(255, 255, 255, 0.8)'
+            }}>
+              {currentUser?.avatar || 'ER'}
+            </div>
+            <div className="text-start d-flex flex-column" style={{ lineHeight: '1.1' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{currentUser?.name || 'Engr. Dilip K Roy'}</span>
+              <span className="text-white-50" style={{ fontSize: '0.68rem' }}>{currentUser?.role || 'Head of Department'}</span>
+            </div>
+            <ChevronDown size={14} className="text-white-50 ms-1" />
+          </button>
+
+          {showUserMenu && (
+            <div 
+              className="position-absolute end-0 mt-2 bg-white rounded shadow-lg border py-2"
+              style={{ width: '360px', zIndex: 1050, animation: 'fadeIn 0.15s ease' }}
+            >
+              <div className="px-3 py-1 border-bottom mb-1">
+                <div className="text-muted text-uppercase fw-bold" style={{ fontSize: '0.68rem', letterSpacing: '0.5px' }}>
+                  Simulated Active Desk (সরাসরি ইউজার পরিবর্তন)
+                </div>
+                <div className="text-secondary small" style={{ fontSize: '0.72rem' }}>
+                  লগইন পরিবর্তন না করে সরাসরি দায়িত্বশীল কর্মকর্তা সিলেক্ট করুন:
+                </div>
+              </div>
+
+              {SYSTEM_USERS.map((user) => {
+                const isActive = currentUser?.id === user.id;
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    className={`dropdown-item px-3 py-2 d-flex align-items-center justify-content-between text-start ${isActive ? 'bg-light' : ''}`}
+                    onClick={() => {
+                      if (onSelectUser) onSelectUser(user);
+                      setShowUserMenu(false);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="d-flex align-items-center gap-2">
+                      <div style={{
+                        background: user.color,
+                        color: 'white',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        flexShrink: 0
+                      }}>
+                        {user.avatar}
+                      </div>
+                      <div>
+                        <div className="fw-bold text-dark small" style={{ fontSize: '0.82rem' }}>
+                          {user.label}
+                        </div>
+                        <div className="text-muted" style={{ fontSize: '0.7rem' }}>
+                          {user.designation}
+                        </div>
+                      </div>
+                    </div>
+                    {isActive && <Check size={16} className="text-success ms-2 flex-shrink-0" />}
+                  </button>
+                );
+              })}
+
+              <div className="px-3 pt-2 mt-1 border-top text-muted" style={{ fontSize: '0.68rem', lineHeight: '1.3' }}>
+                <div className="fw-semibold text-dark mb-1">DCCI 5-Stage Approval Flow:</div>
+                <span className="text-primary fw-medium">Initiator</span> &rarr;{' '}
+                <span className="text-success fw-medium">HOD</span> &rarr;{' '}
+                <span className="text-warning text-dark fw-medium">Accounts</span> &rarr;{' '}
+                <span style={{ color: '#7c3aed' }} className="fw-medium">SG</span> &rarr;{' '}
+                <span className="text-danger fw-medium">President</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

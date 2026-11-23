@@ -30,8 +30,9 @@ import {
   Calendar
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { SYSTEM_USERS } from '../constants/systemUsers';
 
-export default function WorkflowView() {
+export default function WorkflowView({ currentUser }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeBucket, setActiveBucket] = useState('Process Status');
@@ -141,30 +142,50 @@ export default function WorkflowView() {
     loadEdmsDocuments();
   }, [activeBucket, searchTerm]);
 
+  // Sync acting role & user when currentUser changes from Header dropdown
+  useEffect(() => {
+    if (currentUser) {
+      setActingRole(currentUser.role);
+      setActingUser(currentUser.name);
+      if (currentUser.role === 'Initiator') {
+        setNewApp(prev => ({
+          ...prev,
+          Initiator: currentUser.name,
+          Designation: currentUser.designation
+        }));
+      }
+    }
+  }, [currentUser]);
+
   useEffect(() => {
     if (selectedCase?.AppId) {
       loadActionHistory(selectedCase.AppId);
       loadEdmsDocuments();
-      // Auto-set acting role based on case task
-      const task = selectedCase.TaskName || '';
-      if (task.includes('Head of Department')) {
-        setActingRole('Head of Department');
-        setActingUser('Engr. Dilip K Roy');
-      } else if (task.includes('Accounts')) {
-        setActingRole('Accounts & Finance');
-        setActingUser('CFO / Chief Accounts Officer');
-      } else if (task.includes('Secretary General')) {
-        setActingRole('Secretary General');
-        setActingUser('Executive Secretary / SG');
-      } else if (task.includes('President')) {
-        setActingRole('President');
-        setActingUser('President, DCCI');
-      } else if (task.includes('Initiator') || selectedCase.AppStatus === 'Query') {
-        setActingRole('Initiator');
-        setActingUser(selectedCase.Initiator);
+      if (currentUser) {
+        setActingRole(currentUser.role);
+        setActingUser(currentUser.name);
+      } else {
+        // Auto-set acting role based on case task
+        const task = selectedCase.TaskName || '';
+        if (task.includes('Head of Department')) {
+          setActingRole('Head of Department');
+          setActingUser('Engr. Dilip K Roy');
+        } else if (task.includes('Accounts')) {
+          setActingRole('Accounts & Finance');
+          setActingUser('CFO / Chief Accounts Officer');
+        } else if (task.includes('Secretary General')) {
+          setActingRole('Secretary General');
+          setActingUser('Secretary General (SG)');
+        } else if (task.includes('President')) {
+          setActingRole('President');
+          setActingUser('President of DCCI');
+        } else if (task.includes('Initiator') || selectedCase.AppStatus === 'Query') {
+          setActingRole('Initiator');
+          setActingUser(selectedCase.Initiator || 'Md. Arman Hossen');
+        }
       }
     }
-  }, [selectedCase]);
+  }, [selectedCase, currentUser]);
 
   const loadBucketCounts = async () => {
     try {
@@ -315,11 +336,21 @@ export default function WorkflowView() {
     }
 
     if (actionType !== 'Review') {
+      let confirmText = `Are you sure you want to perform "${actionType}" on Application #${selectedCase.AppId}?`;
+      if (actionType === 'Approve') {
+        const destText = 
+          actingRole === 'Head of Department' ? 'Accounts & Finance (CFO)' :
+          actingRole === 'Accounts & Finance' ? 'Secretary General (SG)' :
+          actingRole === 'Secretary General' ? 'President of DCCI' :
+          actingRole === 'President' ? 'Final Completion (চূড়ান্ত অনুমোদন)' : 'Next Stage';
+        confirmText = `Approve Application #${selectedCase.AppId} and forward to ${destText}?`;
+      }
+
       const confirm = await Swal.fire({
-        title: actionType === 'Clarify' ? 'Submit Clarification?' : `${actionType} Application?`,
+        title: actionType === 'Clarify' ? 'Submit Clarification?' : actionType === 'Approve' && actingRole === 'President' ? 'Final Approval?' : `${actionType} Application?`,
         text: actionType === 'Clarify' 
           ? `Submit your written explanation for Application #${selectedCase.AppId} and return to Approver?`
-          : `Are you sure you want to perform "${actionType}" on Application #${selectedCase.AppId}?`,
+          : confirmText,
         icon: actionType === 'Reject' ? 'warning' : actionType === 'Clarify' ? 'info' : 'question',
         showCancelButton: true,
         confirmButtonColor: actionType === 'Reject' ? '#dc3545' : actionType === 'Query' ? '#ffc107' : '#198754',
@@ -344,11 +375,12 @@ export default function WorkflowView() {
       });
 
       if (res.data.status) {
+        const nextInfo = res.data?.data?.NewTaskName ? ` (Next Desk: ${res.data.data.NewTaskName})` : '';
         Swal.fire({
           icon: 'success',
-          title: actionType === 'Clarify' ? 'Clarification Submitted!' : actionType === 'Review' ? 'Forwarded for Review!' : `Action: ${actionType} Successful`,
-          text: res.data.message,
-          timer: 2000,
+          title: actionType === 'Clarify' ? 'Clarification Submitted!' : actionType === 'Review' ? 'Forwarded for Review!' : actionType === 'Approve' && actingRole === 'President' ? 'Approved & Completed!' : 'Approved & Forwarded!',
+          text: (res.data.message || '') + nextInfo,
+          timer: 2200,
           showConfirmButton: false
         });
         setActionComments('');
@@ -532,6 +564,42 @@ export default function WorkflowView() {
           </div>
         </div>
 
+        {/* DCCI 5-Stage Approval Hierarchy Indicator */}
+        <div className="bg-white p-2 px-3 rounded shadow-sm border mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div className="d-flex align-items-center gap-2 flex-wrap" style={{ fontSize: '0.78rem' }}>
+            <span className="text-muted fw-bold">Approval Hierarchy:</span>
+            <span className={`badge px-2 py-1 ${currentUser?.role === 'Initiator' ? 'bg-primary' : 'bg-light text-secondary border'}`}>
+              ১. Initiator (Arman)
+            </span>
+            <ChevronRight size={13} className="text-muted" />
+            <span className={`badge px-2 py-1 ${currentUser?.role === 'Head of Department' ? 'bg-success' : 'bg-light text-secondary border'}`}>
+              ২. HOD (Dilip Roy)
+            </span>
+            <ChevronRight size={13} className="text-muted" />
+            <span className={`badge px-2 py-1 ${currentUser?.role === 'Accounts & Finance' ? 'bg-warning text-dark' : 'bg-light text-secondary border'}`}>
+              ৩. Accounts & Finance (CFO)
+            </span>
+            <ChevronRight size={13} className="text-muted" />
+            <span 
+              className={`badge px-2 py-1 ${currentUser?.role === 'Secretary General' ? 'text-white' : 'bg-light text-secondary border'}`}
+              style={{ backgroundColor: currentUser?.role === 'Secretary General' ? '#7c3aed' : undefined }}
+            >
+              ৪. Secretary General (SG)
+            </span>
+            <ChevronRight size={13} className="text-muted" />
+            <span className={`badge px-2 py-1 ${currentUser?.role === 'President' ? 'bg-danger' : 'bg-light text-secondary border'}`}>
+              ৫. President (চূড়ান্ত অনুমোদন)
+            </span>
+          </div>
+
+          <div className="d-flex align-items-center gap-1">
+            <small className="text-muted" style={{ fontSize: '0.75rem' }}>Active Desk:</small>
+            <span className="badge" style={{ backgroundColor: currentUser?.color || '#0b7337', color: '#fff', fontSize: '0.75rem' }}>
+              {currentUser?.name || 'Engr. Dilip K Roy'}
+            </span>
+          </div>
+        </div>
+
         {/* Loading Spinner */}
         {loading && (
           <div className="text-center py-5">
@@ -578,10 +646,26 @@ export default function WorkflowView() {
                       <span className="badge bg-light text-dark border">{c.ProcessName}</span>
                     </td>
                     <td>
-                      <span className="fw-semibold text-dark d-flex align-items-center gap-1">
-                        <User size={13} className="text-muted" />
-                        {c.TaskName}
-                      </span>
+                      <div className="d-flex align-items-center gap-1 flex-wrap">
+                        <span className="fw-semibold text-dark d-flex align-items-center gap-1">
+                          <User size={13} className="text-muted" />
+                          {c.TaskName}
+                        </span>
+                        {(() => {
+                          const taskLower = (c.TaskName || '').toLowerCase();
+                          const isMyDesk = 
+                            (currentUser?.role === 'Head of Department' && taskLower.includes('head of department')) ||
+                            (currentUser?.role === 'Accounts & Finance' && taskLower.includes('accounts')) ||
+                            (currentUser?.role === 'Secretary General' && taskLower.includes('secretary general')) ||
+                            (currentUser?.role === 'President' && taskLower.includes('president')) ||
+                            (currentUser?.role === 'Initiator' && c.AppStatus === 'Query');
+                          return isMyDesk ? (
+                            <span className="badge bg-warning text-dark border border-warning ms-1" style={{ fontSize: '0.65rem' }}>
+                              Pending on Your Desk
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
                     </td>
                     <td>
                       <span className={`badge ${
@@ -972,25 +1056,23 @@ export default function WorkflowView() {
                         <ShieldCheck size={18} /> Approver Action Desk ({selectedCase.TaskName})
                       </h6>
                       <div className="d-flex align-items-center gap-2">
-                        <small className="text-muted">Acting As:</small>
+                        <small className="text-muted fw-semibold">Acting Desk:</small>
                         <select 
                           className="form-select form-select-sm"
-                          style={{ width: '220px' }}
+                          style={{ width: '330px', fontWeight: 600 }}
                           value={actingRole}
                           onChange={(e) => {
-                            setActingRole(e.target.value);
-                            if (e.target.value === 'Head of Department') setActingUser('Engr. Dilip K Roy');
-                            else if (e.target.value === 'Accounts & Finance') setActingUser('CFO / Accounts');
-                            else if (e.target.value === 'Secretary General') setActingUser('Secretary General');
-                            else if (e.target.value === 'President') setActingUser('President of DCCI');
-                            else setActingUser(selectedCase.Initiator);
+                            const selRole = e.target.value;
+                            setActingRole(selRole);
+                            const matched = SYSTEM_USERS.find(usr => usr.role === selRole);
+                            if (matched) setActingUser(matched.name);
                           }}
                         >
-                          <option value="Head of Department">Head of Department (Dilip Roy)</option>
-                          <option value="Accounts & Finance">Accounts & Finance (CFO)</option>
-                          <option value="Secretary General">Secretary General (SG)</option>
-                          <option value="President">President of DCCI</option>
-                          <option value="Initiator">Initiator (Arman Hossen)</option>
+                          {SYSTEM_USERS.map((u) => (
+                            <option key={u.id} value={u.role}>
+                              {u.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -1006,7 +1088,7 @@ export default function WorkflowView() {
                       ></textarea>
                     </div>
 
-                    <div className="d-flex justify-content-end gap-2">
+                    <div className="d-flex justify-content-end gap-2 flex-wrap">
                       <button 
                         type="button" 
                         className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
@@ -1037,11 +1119,32 @@ export default function WorkflowView() {
 
                       <button 
                         type="button" 
-                        className="btn btn-sm btn-success px-3 d-flex align-items-center gap-1 fw-bold"
+                        className={`btn btn-sm ${actingRole === 'President' ? 'btn-danger' : 'btn-success'} px-3 d-flex align-items-center gap-1 fw-bold`}
                         onClick={() => handleExecuteAction('Approve')}
                         disabled={isActing}
+                        title={`Approve and forward according to DCCI workflow hierarchy`}
                       >
-                        <Check size={16} /> Approve & Forward
+                        {actingRole === 'President' ? (
+                          <>
+                            <CheckCircle2 size={16} /> Final Approve & Complete (চূড়ান্ত অনুমোদন)
+                          </>
+                        ) : actingRole === 'Secretary General' ? (
+                          <>
+                            <Check size={16} /> Approve & Forward &rarr; President
+                          </>
+                        ) : actingRole === 'Accounts & Finance' ? (
+                          <>
+                            <Check size={16} /> Approve & Forward &rarr; Secretary General
+                          </>
+                        ) : actingRole === 'Head of Department' ? (
+                          <>
+                            <Check size={16} /> Approve & Forward &rarr; Accounts & Finance
+                          </>
+                        ) : (
+                          <>
+                            <Check size={16} /> Approve & Forward
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
