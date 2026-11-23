@@ -232,6 +232,8 @@ public class DocumentController : ControllerBase
                 sql += @" AND (
                     LOWER(d.Name) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(d.OriginalFileName) LIKE LOWER('%' || @Search || '%') OR
+                    LOWER(d.SupplierName) LIKE LOWER('%' || @Search || '%') OR
+                    LOWER(d.DocumentType) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(d.Tags) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(d.FileNo) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(d.NoteNo) LIKE LOWER('%' || @Search || '%') OR
