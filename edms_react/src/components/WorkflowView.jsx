@@ -625,11 +625,22 @@ export default function WorkflowView({ currentUser }) {
               </span>
               <input 
                 type="text" 
-                className="form-control form-control-sm border-start-0"
+                className="form-control form-control-sm border-start-0 border-end-0"
                 placeholder="Search by APP ID, Subject, Initiator..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-link bg-white border border-start-0 text-muted px-2 d-flex align-items-center"
+                  style={{ textDecoration: 'none' }}
+                  title="Clear search"
+                  onClick={() => setSearchTerm('')}
+                >
+                  <X size={14} className="text-secondary" />
+                </button>
+              )}
             </div>
 
             <button className="btn btn-sm btn-outline-success d-flex align-items-center gap-1" onClick={() => { loadCases(); loadBucketCounts(); }}>

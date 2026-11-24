@@ -146,17 +146,28 @@ export default function Header({ currentView, setCurrentView, globalSearch, setG
 
       <div className="d-flex align-items-center gap-3">
         {/* Quick Search */}
-        <div className="input-group input-group-sm" style={{ width: '260px' }}>
-          <span className="input-group-text bg-white border-0 text-muted">
+        <div className="input-group input-group-sm bg-white rounded overflow-hidden align-items-center" style={{ width: '270px' }}>
+          <span className="input-group-text bg-white border-0 text-muted pe-1">
             <Search size={14} />
           </span>
           <input
             type="text"
-            className="form-control border-0 shadow-none ps-0"
+            className="form-control border-0 shadow-none ps-1 pe-1"
             placeholder="Search documents or tags..."
             value={globalSearch}
             onChange={(e) => setGlobalSearch(e.target.value)}
           />
+          {globalSearch && (
+            <button
+              type="button"
+              className="btn btn-sm btn-link text-muted p-0 pe-2 text-decoration-none border-0 d-flex align-items-center"
+              style={{ background: 'transparent' }}
+              title="Clear search"
+              onClick={() => setGlobalSearch('')}
+            >
+              <X size={14} className="text-secondary" />
+            </button>
+          )}
         </div>
 
         {/* Interactive Notifications Bell */}
