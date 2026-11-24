@@ -304,3 +304,45 @@ body {
     print-color-adjust: exact !important;
   }
 }
+
+/* ==========================================================================
+   DOCX / Word Document Previewer Styling
+   ========================================================================== */
+.docx-render-wrapper {
+  width: 100%;
+  min-height: 100%;
+}
+
+.docx-render-wrapper .docx-wrapper {
+  background: transparent !important;
+  padding: 10px 0 !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+.docx-render-wrapper .docx-wrapper > section.docx {
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
+  margin-bottom: 25px !important;
+  background-color: #ffffff !important;
+  border-radius: 3px !important;
+  box-sizing: border-box !important;
+}
+
+.docx-render-wrapper .docx-wrapper > section.docx article {
+  color: #1a202c !important;
+}
+
+.docx-mammoth-fallback table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 15px 0;
+}
+
+.docx-mammoth-fallback table, 
+.docx-mammoth-fallback th, 
+.docx-mammoth-fallback td {
+  border: 1px solid #cbd5e0;
+  padding: 8px 12px;
+}

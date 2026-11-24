@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Api, { API_BASE_URL } from '../api';
 import * as XLSX from 'xlsx';
+import { renderAsync } from 'docx-preview';
+import mammoth from 'mammoth';
 import { 
   X, 
   Download, 
@@ -56,6 +58,11 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState(null);
 
+  // Word Document (DOCX/DOC) preview state
+  const [docxLoading, setDocxLoading] = useState(false);
+  const [docxError, setDocxError] = useState(null);
+  const docxContainerRef = React.useRef(null);
+
   const loadActivityLogs = async (docId) => {
     try {
       setLogsLoading(true);
@@ -101,17 +108,64 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
   const isExcel = fileExt === 'xlsx' || fileExt === 'xls';
   const isPdf = fileExt === 'pdf';
   const isImage = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(fileExt);
+  const isDocx = fileExt === 'docx' || fileExt === 'doc';
 
   const previewStreamUrl = activeVersion 
     ? `${API_BASE_URL}/Document/StreamVersion?versionId=${activeVersion.Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`
     : `${API_BASE_URL}/Document/StreamPdf?id=${doc.Id}&user=${encodeURIComponent(activeUser.name)}&role=${encodeURIComponent(activeUser.role || activeUser.designation)}`;
 
-  // If the active file is Excel, parse and render it as an in-browser spreadsheet table!
   useEffect(() => {
     if (isExcel) {
       loadExcelData(previewStreamUrl);
+    } else if (isDocx) {
+      loadDocxData(previewStreamUrl);
     }
-  }, [activeVersion, doc, isExcel]);
+  }, [activeVersion, doc, isExcel, isDocx]);
+
+  const loadDocxData = async (url) => {
+    try {
+      setDocxLoading(true);
+      setDocxError(null);
+      const res = await Api.get(url, { responseType: 'arraybuffer' });
+      
+      // Allow DOM to settle for container ref
+      setTimeout(async () => {
+        if (!docxContainerRef.current) return;
+        docxContainerRef.current.innerHTML = '';
+
+        try {
+          await renderAsync(res.data, docxContainerRef.current, null, {
+            className: 'docx',
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            breakPages: true
+          });
+        } catch (docxErr) {
+          console.warn('docx-preview failed, attempting mammoth fallback:', docxErr);
+          try {
+            const mammothResult = await mammoth.convertToHtml({ arrayBuffer: res.data });
+            if (docxContainerRef.current) {
+              docxContainerRef.current.innerHTML = `
+                <div class="docx-mammoth-fallback p-5 bg-white shadow rounded" style="max-width: 850px; width: 100%; margin: 20px auto; color: #2d3748; line-height: 1.7; font-family: 'Segoe UI', Arial, sans-serif; min-height: 800px;">
+                  ${mammothResult.value}
+                </div>
+              `;
+            }
+          } catch (mErr) {
+            console.error('Both docx-preview and mammoth failed:', mErr);
+            setDocxError('Could not render document preview in browser. You can download the file to open in Microsoft Word.');
+          }
+        } finally {
+          setDocxLoading(false);
+        }
+      }, 50);
+    } catch (err) {
+      console.error('Error loading DOCX preview data:', err);
+      setDocxError('Could not load Word document. You can download the file to open in Microsoft Word.');
+      setDocxLoading(false);
+    }
+  };
 
   const loadExcelData = async (url) => {
     try {
@@ -608,8 +662,57 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
                 </div>
               )}
 
-              {/* 4. If Other Office Document (e.g. Word .docx) */}
-              {!isExcel && !isPdf && !isImage && (
+              {/* 4. If File is Word DOCX / DOC: High-Fidelity Client-side Document Preview */}
+              {isDocx && (
+                <div className="h-100 d-flex flex-column bg-secondary bg-opacity-25 overflow-hidden">
+                  <div className="d-flex justify-content-between align-items-center px-3 py-2 bg-dark text-white border-bottom border-secondary">
+                    <div className="d-flex align-items-center gap-2">
+                      <FileText size={16} className="text-info" />
+                      <span className="small fw-semibold">{currentFileName}</span>
+                      <span className="badge bg-info text-dark" style={{ fontSize: '10px' }}>Word Document Preview</span>
+                    </div>
+                    <button 
+                      onClick={() => handleDownloadFile()}
+                      className="btn btn-sm btn-outline-light d-flex align-items-center gap-1 py-1 px-2"
+                      style={{ fontSize: '12px' }}
+                    >
+                      <Download size={13} /> Download Word Document
+                    </button>
+                  </div>
+
+                  <div className="flex-grow-1 overflow-auto p-3 position-relative" style={{ backgroundColor: '#525659' }}>
+                    {docxLoading && (
+                      <div className="text-center py-5">
+                        <div className="spinner-border text-info" role="status"></div>
+                        <p className="mt-2 text-white small">Rendering Word Document...</p>
+                      </div>
+                    )}
+
+                    {docxError && (
+                      <div className="alert alert-warning m-3 small d-flex align-items-center justify-content-between">
+                        <span>{docxError}</span>
+                        <button onClick={() => handleDownloadFile()} className="btn btn-sm btn-primary ms-3">
+                          <Download size={14} className="me-1" /> Download File
+                        </button>
+                      </div>
+                    )}
+
+                    <div 
+                      ref={docxContainerRef} 
+                      className="docx-render-wrapper"
+                      style={{
+                        minHeight: '100%',
+                        display: docxLoading || docxError ? 'none' : 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center'
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 5. If Other Unrecognized Document */}
+              {!isExcel && !isPdf && !isImage && !isDocx && (
                 <div className="h-100 d-flex flex-column align-items-center justify-content-center p-5 text-center bg-light">
                   <FileText size={64} className="text-primary mb-3" />
                   <h5 className="fw-bold text-dark mb-1">{doc.Name}</h5>
@@ -621,7 +724,7 @@ export default function DocumentViewerModal({ doc, onClose, onRefresh, zIndex = 
                     download={currentFileName}
                     className="btn btn-primary d-flex align-items-center gap-2"
                   >
-                    <Download size={16} /> Download to Open in MS Office
+                    <Download size={16} /> Download to Open
                   </a>
                 </div>
               )}
