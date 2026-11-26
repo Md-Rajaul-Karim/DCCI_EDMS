@@ -782,12 +782,7 @@ export default function WorkflowView({ currentUser }) {
                           {c.TaskName}
                         </span>
                         {(() => {
-                          const taskLower = (c.TaskName || '').toLowerCase();
-                          const isMyDesk = 
-                            (currentUser?.role === 'Head of Department' && taskLower.includes('head of department')) ||
-                            (currentUser?.role === 'Accounts & Finance' && taskLower.includes('accounts')) ||
-                            (currentUser?.role === 'Secretary General' && taskLower.includes('secretary general')) ||
-                            (currentUser?.role === 'President' && taskLower.includes('president')) ||
+                          const isMyDesk = isMyTurnToAct(currentUser?.role, c.TaskName) || 
                             (currentUser?.role === 'Initiator' && c.AppStatus === 'Query');
                           return isMyDesk ? (
                             <span className="badge bg-warning text-dark border border-warning ms-1" style={{ fontSize: '0.65rem' }}>
