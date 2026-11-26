@@ -626,7 +626,7 @@ export default function WorkflowView({ currentUser }) {
               <input 
                 type="text" 
                 className="form-control form-control-sm border-start-0 border-end-0"
-                placeholder="Search by APP ID, Subject, Initiator..."
+                placeholder="Search by APP ID, Document, Subject, Initiator..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -726,7 +726,8 @@ export default function WorkflowView({ currentUser }) {
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light small text-uppercase text-secondary">
                 <tr>
-                  <th>APP ID</th>
+                  <th style={{ width: '120px' }}>APP ID</th>
+                  <th>DOCUMENT NAME</th>
                   <th>PROCESS NAME</th>
                   <th>CURRENT TASK / DESK</th>
                   <th>STATUS</th>
@@ -737,12 +738,43 @@ export default function WorkflowView({ currentUser }) {
                 </tr>
               </thead>
               <tbody>
-                {cases.map((c) => (
-                  <tr key={c.Id} style={{ cursor: 'pointer' }} onClick={() => setSelectedCase(c)}>
-                    <td className="fw-bold text-success">#{c.AppId}</td>
-                    <td>
-                      <span className="badge bg-light text-dark border">{c.ProcessName}</span>
-                    </td>
+                {cases.map((c) => {
+                  const attachments = getParsedAttachments(c);
+                  const primaryDocTitle = c.FileName || c.Subject || 'Document';
+                  const subText = c.Subject && c.Subject !== c.FileName ? c.Subject : (c.FileNumber ? `File: ${c.FileNumber}` : (attachments[0]?.name || ''));
+
+                  return (
+                    <tr key={c.Id} style={{ cursor: 'pointer' }} onClick={() => setSelectedCase(c)}>
+                      <td className="fw-bold text-success text-nowrap">#{c.AppId}</td>
+                      <td>
+                        <div className="d-flex align-items-center gap-2" style={{ minWidth: '200px', maxWidth: '280px' }}>
+                          <FileText size={18} className="text-success flex-shrink-0" />
+                          <div className="text-truncate">
+                            <div className="d-flex align-items-center gap-1">
+                              <span className="fw-semibold text-dark text-truncate" title={primaryDocTitle}>
+                                {primaryDocTitle}
+                              </span>
+                              {attachments.length > 0 && (
+                                <span 
+                                  className="badge bg-light text-secondary border py-0 px-1 d-inline-flex align-items-center flex-shrink-0" 
+                                  style={{ fontSize: '10px' }} 
+                                  title={`${attachments.length} attachment(s)`}
+                                >
+                                  <Paperclip size={10} className="me-1" />{attachments.length}
+                                </span>
+                              )}
+                            </div>
+                            {subText && (
+                              <small className="text-muted text-truncate d-block" style={{ fontSize: '11px' }} title={subText}>
+                                {subText}
+                              </small>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="badge bg-light text-dark border">{c.ProcessName}</span>
+                      </td>
                     <td>
                       <div className="d-flex align-items-center gap-1 flex-wrap">
                         <span className="fw-semibold text-dark d-flex align-items-center gap-1">
@@ -788,7 +820,8 @@ export default function WorkflowView({ currentUser }) {
                       </button>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>

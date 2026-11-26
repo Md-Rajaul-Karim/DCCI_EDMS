@@ -67,6 +67,8 @@ public class WorkflowController : ControllerBase
                 sql += @" AND (
                     LOWER(AppId) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(ProcessName) LIKE LOWER('%' || @Search || '%') OR
+                    LOWER(FileName) LIKE LOWER('%' || @Search || '%') OR
+                    LOWER(FileNumber) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(Subject) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(Initiator) LIKE LOWER('%' || @Search || '%') OR
                     LOWER(TaskName) LIKE LOWER('%' || @Search || '%')
