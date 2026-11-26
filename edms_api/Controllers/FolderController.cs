@@ -28,13 +28,42 @@ public class FolderController : ControllerBase
             using var conn = new SqliteConnection(_connectionString);
             await conn.OpenAsync();
 
-            string sql = "SELECT * FROM DepartmentFolders ORDER BY SortOrder ASC, Name ASC";
-            if (!string.IsNullOrEmpty(folderType))
-            {
-                sql = "SELECT * FROM DepartmentFolders WHERE FolderType = @FolderType ORDER BY SortOrder ASC, Name ASC";
-            }
+            string sql = @"
+                SELECT f.Id, f.Name, f.ParentId, f.Code, f.FolderType, f.SortOrder, f.IsRequired,
+                       CASE 
+                           WHEN f.ParentId IS NULL THEN (SELECT COUNT(1) FROM Documents d WHERE d.IsDeleted = 0)
+                           ELSE (
+                               WITH RECURSIVE SubFolderTree AS (
+                                   SELECT Id FROM DepartmentFolders WHERE Id = f.Id
+                                   UNION ALL
+                                   SELECT sf.Id FROM DepartmentFolders sf INNER JOIN SubFolderTree sft ON sf.ParentId = sft.Id
+                               )
+                               SELECT COUNT(1) FROM Documents d 
+                               WHERE (d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree) 
+                                      OR LOWER(d.DocumentType) = LOWER(f.Code) 
+                                      OR LOWER(d.DocumentType) = LOWER(f.Name))
+                                 AND d.IsDeleted = 0
+                           )
+                       END AS DocumentCount,
+                       CASE 
+                           WHEN f.ParentId IS NULL THEN (SELECT COUNT(1) FROM Documents d WHERE d.IsDeleted = 1)
+                           ELSE (
+                               WITH RECURSIVE SubFolderTree AS (
+                                   SELECT Id FROM DepartmentFolders WHERE Id = f.Id
+                                   UNION ALL
+                                   SELECT sf.Id FROM DepartmentFolders sf INNER JOIN SubFolderTree sft ON sf.ParentId = sft.Id
+                               )
+                               SELECT COUNT(1) FROM Documents d 
+                               WHERE (d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree) 
+                                      OR LOWER(d.DocumentType) = LOWER(f.Code) 
+                                      OR LOWER(d.DocumentType) = LOWER(f.Name))
+                                 AND d.IsDeleted = 1
+                           )
+                       END AS DeletedCount
+                FROM DepartmentFolders f
+                ORDER BY f.SortOrder ASC, f.Name ASC";
 
-            var rows = await conn.QueryAsync<object>(sql, new { FolderType = folderType });
+            var rows = await conn.QueryAsync<object>(sql);
             return ApiResponse<List<object>>.Success(rows.AsList(), "Folders fetched successfully");
         }
         catch (Exception ex)

@@ -113,64 +113,37 @@ public static class DbInitializer
             );
         ");
 
-        // 2. Cleanup non-DCCI event archive mockups and reassign any files to IT
-        conn.Execute("UPDATE Documents SET DepartmentFolderId = 4 WHERE DepartmentFolderId IN (SELECT Id FROM DepartmentFolders WHERE FolderType IN ('ArchiveProject', 'ArchiveSubfolder'));");
-        conn.Execute("DELETE FROM DepartmentFolders WHERE FolderType IN ('ArchiveProject', 'ArchiveSubfolder') OR Code LIKE 'BPC%';");
-        conn.Execute("INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) SELECT 'Administration', 1, 'ADMIN', 'Department', 7, 0 WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'ADMIN');");
-        conn.Execute("INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) SELECT 'Accounts & Finance', 1, 'ACC', 'Department', 8, 0 WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'ACC');");
+        // 2. Folderize strictly by Document Type (User requested replacing Department folders with Document Types)
+        // Clean up any legacy department folders
+        conn.Execute("DELETE FROM DepartmentFolders WHERE FolderType = 'Department' OR Name = 'DCCI';");
 
-        // Seed Standard Department Sub-Folders (Loophole 5)
-        conn.Execute(@"
-            INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-            SELECT '2026 Projects', 4, 'IT-2026', 'Subfolder', 1, 0 
-            WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'IT-2026');
-        ");
-        var it2026Id = conn.ExecuteScalar<int>("SELECT Id FROM DepartmentFolders WHERE Code = 'IT-2026'");
-        if (it2026Id > 0)
+        var hasDocTypeFolders = conn.ExecuteScalar<int>("SELECT COUNT(1) FROM DepartmentFolders WHERE FolderType = 'DocumentType'");
+        if (hasDocTypeFolders == 0)
         {
+            conn.Execute("DELETE FROM DepartmentFolders;");
+
             conn.Execute(@"
-                INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-                SELECT 'CCTV & Surveillance System', @ParentId, 'IT-CCTV', 'Subfolder', 1, 0 
-                WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'IT-CCTV');
-
-                INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-                SELECT 'Network & Hardware Infrastructure', @ParentId, 'IT-NET', 'Subfolder', 2, 0 
-                WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'IT-NET');
-
-                INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-                SELECT 'Software & Subscriptions', @ParentId, 'IT-SW', 'Subfolder', 3, 0 
-                WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'IT-SW');
-            ", new { ParentId = it2026Id });
+                INSERT INTO DepartmentFolders (Id, Name, ParentId, Code, FolderType, SortOrder, IsRequired) VALUES
+                (1, 'DCCI Document Library', NULL, 'ROOT', 'Root', 0, 1),
+                (2, 'Work Orders', 1, 'WORK ORDER', 'DocumentType', 1, 1),
+                (3, 'Proposals', 1, 'Proposal', 'DocumentType', 2, 1),
+                (4, 'Agreements', 1, 'Agreement', 'DocumentType', 3, 1),
+                (5, 'IT Office Files', 1, 'IT_OFFICE FILE', 'DocumentType', 4, 1),
+                (6, 'Circulars', 1, 'Circular', 'DocumentType', 5, 1),
+                (7, 'Invoices & Bills', 1, 'Invoice', 'DocumentType', 6, 1),
+                (8, 'Specifications', 1, 'Specification', 'DocumentType', 7, 1),
+                (9, 'Reports & Audits', 1, 'Report', 'DocumentType', 8, 1),
+                (10, 'General Documents', 1, 'General', 'DocumentType', 9, 1);
+            ");
         }
 
         conn.Execute(@"
-            INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-            SELECT 'Estate & Maintenance', 24, 'ADMIN-EST', 'Subfolder', 1, 0 
-            WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'ADMIN-EST');
-
-            INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-            SELECT 'Store & Logistics', 24, 'ADMIN-STR', 'Subfolder', 2, 0 
-            WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'ADMIN-STR');
-
-            INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-            SELECT 'Vendor Bills & Invoices', 25, 'ACC-BILLS', 'Subfolder', 1, 0 
-            WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'ACC-BILLS');
-
-            INSERT OR IGNORE INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired) 
-            SELECT 'Financial Audit Reports', 25, 'ACC-AUD', 'Subfolder', 2, 0 
-            WHERE NOT EXISTS (SELECT 1 FROM DepartmentFolders WHERE Code = 'ACC-AUD');
+            UPDATE Documents 
+            SET DepartmentFolderId = COALESCE(
+                (SELECT Id FROM DepartmentFolders WHERE LOWER(Code) = LOWER(Documents.DocumentType) OR LOWER(Name) = LOWER(Documents.DocumentType) LIMIT 1),
+                10
+            );
         ");
-
-        var itCctvId = conn.ExecuteScalar<int>("SELECT Id FROM DepartmentFolders WHERE Code = 'IT-CCTV'");
-        if (itCctvId > 0)
-        {
-            conn.Execute("UPDATE Documents SET DepartmentFolderId = @CctvId WHERE OriginalFileName IN ('Draft_Specifications.pdf', 'Vendor_Price_Quotation.pdf');", new { CctvId = itCctvId });
-        }
-        var itNetId = conn.ExecuteScalar<int>("SELECT Id FROM DepartmentFolders WHERE Code = 'IT-NET'");
-        if (itNetId > 0)
-        {
-            conn.Execute("UPDATE Documents SET DepartmentFolderId = @NetId WHERE OriginalFileName = 'Router_Switch_WorkOrder.pdf';", new { NetId = itNetId });
-        }
 
         var historyCount = conn.ExecuteScalar<int>("SELECT COUNT(1) FROM WorkflowActionHistory WHERE CaseAppId = '7566940683'");
         if (historyCount == 0)
@@ -244,42 +217,10 @@ public static class DbInitializer
             ");
         }
 
-        var folderCount = conn.ExecuteScalar<int>("SELECT COUNT(1) FROM DepartmentFolders WHERE FolderType = 'Department'");
-        if (folderCount == 0)
+        var sampleDocCount = conn.ExecuteScalar<int>("SELECT COUNT(1) FROM Documents;");
+        if (sampleDocCount == 0)
         {
-            // Root DCCI
-            int rootId = conn.QuerySingle<int>(@"
-                INSERT INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired)
-                VALUES ('DCCI', NULL, 'DCCI', 'Root', 1, 0);
-                SELECT last_insert_rowid();
-            ");
-
-            // Official DCCI Departments from SOW & Dilip's demo
-            int itDeptId = 0;
-            var depts = new[]
-            {
-                ("Common Service", "CS", 1),
-                ("Human Resource Department", "HR", 2),
-                ("Information and Technology", "IT", 3),
-                ("PR", "PR", 4),
-                ("Research and Development", "RND", 5),
-                ("Security and Safety", "SEC", 6),
-                ("Administration", "ADMIN", 7),
-                ("Accounts & Finance", "ACC", 8)
-            };
-
-            foreach (var (name, code, sort) in depts)
-            {
-                int deptId = conn.QuerySingle<int>(@"
-                    INSERT INTO DepartmentFolders (Name, ParentId, Code, FolderType, SortOrder, IsRequired)
-                    VALUES (@Name, @ParentId, @Code, 'Department', @SortOrder, 0);
-                    SELECT last_insert_rowid();
-                ", new { Name = name, ParentId = rootId, Code = code, SortOrder = sort });
-
-                if (code == "IT") itDeptId = deptId;
-            }
-
-            // Seed sample files into IT Department (matching Dilip's demo!)
+            // Seed sample files matching Document Types
             var sampleDocs = new[]
             {
                 ("SMS Agreement 2025", "SMS_Agreement_2025.pdf", "Agreement", "Software Shop Limited", "SMS, Agreement", "DCCI/IT/2025/08", "PA-7550", "Agreement for push SMS service"),
@@ -300,6 +241,11 @@ public static class DbInitializer
                     // Create a valid mini PDF placeholder if needed
                     File.WriteAllText(dummyPath, "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000108 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF");
                 }
+
+                int targetFolderId = conn.ExecuteScalar<int>(
+                    "SELECT COALESCE((SELECT Id FROM DepartmentFolders WHERE LOWER(Code) = LOWER(@DocType) OR LOWER(Name) = LOWER(@DocType) LIMIT 1), 10);",
+                    new { DocType = doc.Item3 }
+                );
 
                 int docId = conn.QuerySingle<int>(@"
                     INSERT INTO Documents (
@@ -323,7 +269,7 @@ public static class DbInitializer
                     FileSizeBytes = 102400,
                     ContentType = "application/pdf",
                     DocumentType = doc.Item3,
-                    DepartmentFolderId = itDeptId,
+                    DepartmentFolderId = targetFolderId,
                     Tags = doc.Item5,
                     SupplierName = doc.Item4,
                     FileNo = doc.Item6,
@@ -337,7 +283,11 @@ public static class DbInitializer
                     VALUES (@DocumentId, '1.00', @FilePath, @FileSizeBytes, 'DILIP', 'Initial Document Upload', datetime('now'));
                 ", new { DocumentId = docId, FilePath = $"/media/documents/{doc.Item2}", FileSizeBytes = 102400 });
             }
+        }
 
+        var workflowCaseCount = conn.ExecuteScalar<int>("SELECT COUNT(1) FROM WorkflowCases;");
+        if (workflowCaseCount == 0)
+        {
             // Seed sample Workflow Case (from Dilip's demo: APP ID 7566940683)
             conn.Execute(@"
                 INSERT INTO WorkflowCases (

@@ -226,116 +226,101 @@ export default function ExplorerView({ onNavigateUpload, globalSearch }) {
     }
   };
 
-  // Root folders (ParentId == null)
-  const rootFolders = folders.filter(f => !f.ParentId);
-
-  // Recursive tree node renderer for multi-tier subfolder hierarchy (Loophole 5)
-  const renderFolderItem = (folder, level = 0) => {
-    const isSelected = selectedFolder?.Id === folder.Id && !showArchivedOnly;
-    const children = folders.filter(f => f.ParentId === folder.Id);
-    const hasChildren = children.length > 0;
-    const isExpanded = expandedFolderIds.includes(folder.Id);
-    const isRoot = !folder.ParentId;
-
-    return (
-      <div key={folder.Id} className="mb-1" style={{ marginLeft: level > 0 ? `${Math.min(level, 4) * 8}px` : 0 }}>
-        <div
-          className={`tree-node d-flex align-items-center justify-content-between p-1 rounded ${isSelected ? 'active bg-success text-white fw-bold' : ''}`}
-          style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
-          onClick={() => {
-            setSelectedFolder(folder);
-            setShowArchivedOnly(false);
-          }}
-        >
-          <div className="d-flex align-items-center text-truncate flex-grow-1" style={{ minWidth: 0 }}>
-            {hasChildren ? (
-              <span 
-                className={`me-1 cursor-pointer ${isSelected ? 'text-white' : 'text-muted'}`}
-                onClick={(e) => toggleExpand(folder.Id, e)}
-                style={{ width: '16px', display: 'inline-flex', alignItems: 'center' }}
-                title={isExpanded ? 'Collapse' : 'Expand'}
-              >
-                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </span>
-            ) : (
-              <span style={{ width: '16px', display: 'inline-block' }}></span>
-            )}
-
-            {isRoot ? (
-              <Building size={16} className={`me-2 ${isSelected ? 'text-white' : 'text-success'} flex-shrink-0`} />
-            ) : isSelected || isExpanded ? (
-              <FolderOpen size={15} className={`me-2 ${isSelected ? 'text-white' : 'text-warning'} flex-shrink-0`} />
-            ) : (
-              <Folder size={15} className={`me-2 ${isSelected ? 'text-white' : 'text-muted'} flex-shrink-0`} />
-            )}
-
-            <span className="text-truncate" style={{ fontSize: level === 0 ? '0.88rem' : level === 1 ? '0.82rem' : '0.78rem' }}>
-              {folder.Name}
-            </span>
-          </div>
-
-          <div className="d-flex align-items-center gap-1 ms-1">
-            {hasChildren && (
-              <span className={`badge ${isSelected ? 'bg-white text-success' : 'bg-light text-muted border'}`} style={{ fontSize: '0.62rem' }}>
-                {children.length}
-              </span>
-            )}
-            <button
-              type="button"
-              className={`btn btn-xs p-0 border-0 ${isSelected ? 'text-white' : 'text-muted'}`}
-              style={{ opacity: 0.65, background: 'none' }}
-              title={`Create subfolder inside ${folder.Name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                openNewFolderModal(folder);
-              }}
-            >
-              <Plus size={13} />
-            </button>
-          </div>
-        </div>
-
-        {/* Recursive subfolders rendering */}
-        {hasChildren && isExpanded && (
-          <div className="border-start ms-2 ps-1 mt-1">
-            {children.map(child => renderFolderItem(child, level + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const rootFolder = folders.find(f => !f.ParentId) || folders[0];
+  const typeFolders = folders.filter(f => f.ParentId === rootFolder?.Id);
 
   return (
     <div className="d-flex h-100">
-      {/* Left Explorer Tree Sidebar (Dilip's demo layout) */}
+      {/* Left Explorer Tree Sidebar (Folderized by Document Type) */}
       <div className="tree-sidebar d-flex flex-column justify-content-between" style={{ width: '280px', flexShrink: 0 }}>
         <div>
           <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
-            <span className="fw-bold text-success fs-6">Document Explorer</span>
-            <span className="badge bg-light text-dark">{folders.length} Folders</span>
+            <span className="fw-bold text-success fs-6">Document Types</span>
+            <button 
+              className="btn btn-xs btn-outline-success py-0 px-2 d-flex align-items-center gap-1"
+              onClick={() => openNewFolderModal(rootFolder)}
+              title="Add New Document Type Folder"
+            >
+              <Plus size={12} /> New Type
+            </button>
           </div>
 
-          <div>
-            {rootFolders.map((root) => renderFolderItem(root, 0))}
+          {/* Root: All Documents */}
+          <div 
+            className={`tree-node d-flex align-items-center justify-content-between p-2 rounded mb-2 ${(!selectedFolder || selectedFolder?.Id === rootFolder?.Id) && !showArchivedOnly ? 'active bg-success text-white fw-bold' : ((!selectedFolder || selectedFolder?.Id === rootFolder?.Id) && showArchivedOnly ? 'active bg-danger text-white fw-bold' : '')}`}
+            style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
+            onClick={() => {
+              if (rootFolder) setSelectedFolder(rootFolder);
+              setShowArchivedOnly(false);
+            }}
+          >
+            <div className="d-flex align-items-center gap-2 text-truncate">
+              <Building size={16} className={(!selectedFolder || selectedFolder?.Id === rootFolder?.Id) ? 'text-white' : (showArchivedOnly ? 'text-danger' : 'text-success')} />
+              <span>All Documents</span>
+            </div>
+            <span className={`badge rounded-pill ${(!selectedFolder || selectedFolder?.Id === rootFolder?.Id) ? (showArchivedOnly ? 'bg-white text-danger' : 'bg-white text-success') : 'bg-light text-secondary border'}`}>
+              {showArchivedOnly ? (archiveStats.globalArchivedCount ?? archiveStats.archivedCount ?? 0) : (archiveStats.activeCount ?? 0)}
+            </span>
+          </div>
+
+          {/* Document Types List */}
+          <div className="mt-2">
+            <small className="text-muted text-uppercase fw-bold px-2 d-block mb-1" style={{ fontSize: '0.68rem', letterSpacing: '0.5px' }}>
+              FOLDERS BY DOCUMENT TYPE
+            </small>
+
+            {typeFolders.map((folder) => {
+              const isSelected = selectedFolder?.Id === folder.Id && !showArchivedOnly;
+              const countToShow = showArchivedOnly 
+                ? (folder.DeletedCount ?? folder.deletedCount ?? 0)
+                : (folder.DocumentCount ?? folder.documentCount ?? 0);
+
+              return (
+                <div
+                  key={folder.Id}
+                  className={`tree-node d-flex align-items-center justify-content-between p-2 rounded mb-1 ${isSelected ? 'active bg-success text-white fw-bold' : ''}`}
+                  style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
+                  onClick={() => {
+                    setSelectedFolder(folder);
+                    setShowArchivedOnly(false);
+                  }}
+                >
+                  <div className="d-flex align-items-center gap-2 text-truncate" style={{ minWidth: 0 }}>
+                    {isSelected ? (
+                      <FolderOpen size={16} className="text-white flex-shrink-0" />
+                    ) : (
+                      <Folder size={16} className="text-warning flex-shrink-0" />
+                    )}
+                    <span className="text-truncate" style={{ fontSize: '0.82rem' }}>
+                      {folder.Name}
+                    </span>
+                  </div>
+
+                  <span className={`badge rounded-pill ${isSelected ? 'bg-white text-success' : 'bg-light text-muted border'}`} style={{ fontSize: '0.68rem' }}>
+                    {countToShow}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* Dedicated Archive / Recycle Bin Section in Left Sidebar */}
         <div className="pt-3 border-top mt-3">
           <div 
-            className={`tree-node d-flex align-items-center justify-content-between p-2 rounded cursor-pointer ${showArchivedOnly && !selectedFolder ? 'active bg-danger text-white' : 'text-danger bg-danger bg-opacity-10 border border-danger border-opacity-25'}`}
+            className={`tree-node d-flex align-items-center justify-content-between p-2 rounded cursor-pointer ${showArchivedOnly ? 'active bg-danger text-white' : 'text-danger bg-danger bg-opacity-10 border border-danger border-opacity-25'}`}
             style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
             onClick={() => {
-              setSelectedFolder(null);
+              if (rootFolder) setSelectedFolder(rootFolder);
               setShowArchivedOnly(true);
             }}
             title="View all soft-deleted / archived documents"
           >
             <div className="d-flex align-items-center gap-2">
-              <Trash2 size={16} className={showArchivedOnly && !selectedFolder ? 'text-white' : 'text-danger'} />
+              <Trash2 size={16} className={showArchivedOnly ? 'text-white' : 'text-danger'} />
               <span className="fw-bold">Archive / Recycle Bin</span>
             </div>
-            <span className={`badge rounded-pill ${showArchivedOnly && !selectedFolder ? 'bg-white text-danger' : 'bg-danger text-white'}`}>
+            <span className={`badge rounded-pill ${showArchivedOnly ? 'bg-white text-danger' : 'bg-danger text-white'}`}>
               {archiveStats.globalArchivedCount !== undefined ? archiveStats.globalArchivedCount : archiveStats.archivedCount}
             </span>
           </div>
@@ -398,10 +383,11 @@ export default function ExplorerView({ onNavigateUpload, globalSearch }) {
               onChange={(e) => setDocTypeFilter(e.target.value)}
             >
               <option value="">All Document Types</option>
-              <option value="WORK ORDER">WORK ORDER</option>
-              <option value="Agreement">Agreement</option>
-              <option value="IT_OFFICE FILE">IT_OFFICE FILE</option>
-              <option value="General">General</option>
+              {typeFolders.map((t) => (
+                <option key={t.Id} value={t.Name}>
+                  {t.Name}
+                </option>
+              ))}
             </select>
 
             {/* View Switcher: Grid vs Table */}

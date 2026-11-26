@@ -18,16 +18,28 @@ import Swal from 'sweetalert2';
 
 export default function UploadView({ onUploadSuccess }) {
   const [folders, setFolders] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([
+    'WORK ORDER',
+    'Proposal',
+    'Agreement',
+    'IT_OFFICE FILE',
+    'Circular',
+    'Invoice',
+    'Specification',
+    'Report',
+    'General'
+  ]);
+  const [isCustomType, setIsCustomType] = useState(false);
+  const [customTypeInput, setCustomTypeInput] = useState('');
   const [stagedFiles, setStagedFiles] = useState([]);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Metadata form state
+  // Metadata form state - Folderization is strictly by DocumentType
   const [meta, setMeta] = useState({
     Name: '',
     DocumentType: 'WORK ORDER',
-    DepartmentFolderId: '', // Mandatory: not auto-selected
     ExpiryDate: '',
     ActionUponExpiry: 'NONE',
     Tags: '',
@@ -47,30 +59,19 @@ export default function UploadView({ onUploadSuccess }) {
   const loadFolders = async () => {
     try {
       const res = await Api.get('/Folder/GetTree');
-      if (res.data.status) {
-        setFolders(res.data.data || []);
+      if (res.data.status && Array.isArray(res.data.data)) {
+        setFolders(res.data.data);
+        const typesFromFolders = res.data.data
+          .filter(f => f.FolderType === 'DocumentType' || (f.ParentId && f.Code))
+          .map(f => f.Code || f.Name);
+        if (typesFromFolders.length > 0) {
+          const combined = Array.from(new Set([...documentTypes, ...typesFromFolders]));
+          setDocumentTypes(combined);
+        }
       }
     } catch (err) {
       console.error(err);
     }
-  };
-
-  // Hierarchical folder options (Loophole 5)
-  const getFolderDisplayOptions = () => {
-    const result = [];
-    const buildOptions = (parentId = 1, prefix = '') => {
-      const children = folders.filter(f => f.ParentId === parentId);
-      children.forEach(child => {
-        result.push({
-          id: child.Id,
-          label: `${prefix}${child.FolderType === 'Subfolder' ? '↳ 📁 ' : '📁 '}${child.Name}`,
-          name: child.Name
-        });
-        buildOptions(child.Id, prefix + '    ');
-      });
-    };
-    buildOptions(1, '');
-    return result;
   };
 
   const handleFileDrop = (e) => {
@@ -121,10 +122,16 @@ export default function UploadView({ onUploadSuccess }) {
       return;
     }
 
-    if (!meta.DepartmentFolderId) {
-      Swal.fire('Validation', 'Department / Target Folder is required. Please select a folder.', 'warning');
-      return;
-    }
+    const finalDocType = isCustomType 
+      ? (customTypeInput.trim() || 'General') 
+      : (meta.DocumentType || 'WORK ORDER');
+
+    // Auto-map to folder ID based on DocumentType
+    const matchedFolder = folders.find(f => 
+      f.Code?.toLowerCase() === finalDocType.toLowerCase() || 
+      f.Name?.toLowerCase() === finalDocType.toLowerCase()
+    );
+    const targetFolderId = matchedFolder ? matchedFolder.Id : 10;
 
     try {
       setIsSubmitting(true);
@@ -136,6 +143,8 @@ export default function UploadView({ onUploadSuccess }) {
         
         const fileMeta = {
           ...meta,
+          DocumentType: finalDocType,
+          DepartmentFolderId: targetFolderId,
           Name: stagedFiles.length === 1 ? meta.Name : `${meta.Name} - ${item.name}`
         };
         formData.append('metadataJson', JSON.stringify(fileMeta));
@@ -152,17 +161,18 @@ export default function UploadView({ onUploadSuccess }) {
       Swal.fire({
         icon: 'success',
         title: 'Upload Complete',
-        text: `${stagedFiles.length} document(s) uploaded and indexed successfully!`,
+        text: `${stagedFiles.length} document(s) uploaded and saved to [${finalDocType}] folder!`,
         timer: 1800,
         showConfirmButton: false
       });
 
       // Clear form
       setStagedFiles([]);
+      setIsCustomType(false);
+      setCustomTypeInput('');
       setMeta({
         Name: '',
         DocumentType: 'WORK ORDER',
-        DepartmentFolderId: '',
         ExpiryDate: '',
         ActionUponExpiry: 'NONE',
         Tags: '',
@@ -305,47 +315,60 @@ export default function UploadView({ onUploadSuccess }) {
                 />
               </div>
 
-              {/* Department & Folder */}
-              <div className="mb-3">
-                <label className="form-label small fw-bold">
-                  Department / Target Folder <span className="text-danger">*</span>
-                </label>
-                <select 
-                  className={`form-select form-select-sm ${!meta.DepartmentFolderId ? 'border-danger border-opacity-50' : 'border-success'}`}
-                  value={meta.DepartmentFolderId}
-                  onChange={(e) => setMeta({ ...meta, DepartmentFolderId: e.target.value ? parseInt(e.target.value) : '' })}
-                  required
-                >
-                  <option value="">-- Select Target Folder / Department --</option>
-                  {getFolderDisplayOptions().map(opt => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                {!meta.DepartmentFolderId && (
-                  <small className="text-muted d-block mt-1" style={{ fontSize: '0.75rem' }}>
-                    * এটি একটি বাধ্যতামূলক ফিল্ড। ড্রপডাউন থেকে টার্গেট ডিপার্টমেন্ট বা ফোল্ডার সিলেক্ট করুন।
-                  </small>
-                )}
+              {/* Auto Folderization Banner */}
+              <div className="p-2 mb-3 bg-light rounded border border-success border-opacity-25 d-flex align-items-center gap-2">
+                <Layers size={18} className="text-success flex-shrink-0" />
+                <div className="small text-muted" style={{ fontSize: '0.78rem' }}>
+                  <strong>স্বয়ংক্রিয় ফোল্ডারাইজেশন:</strong> সিলেক্ট করা <strong>Document Type</strong> অনুসারেই ফাইলটি Explorer-এ নির্দিষ্ট ফোল্ডারে সংরক্ষিত হবে। আলাদা ডিপার্টমেন্ট সিলেক্ট করার প্রয়োজন নেই।
+                </div>
               </div>
 
-              {/* Document Type & Action Upon Expiry */}
+              {/* Document Type (Acts as Target Folder) & Action Upon Expiry */}
               <div className="row g-2 mb-3">
                 <div className="col-md-6">
-                  <label className="form-label small fw-bold">Document Type</label>
-                  <select 
-                    className="form-select form-select-sm"
-                    value={meta.DocumentType}
-                    onChange={(e) => setMeta({ ...meta, DocumentType: e.target.value })}
-                  >
-                    <option value="WORK ORDER">WORK ORDER</option>
-                    <option value="Agreement">Agreement</option>
-                    <option value="IT_OFFICE FILE">IT_OFFICE FILE</option>
-                    <option value="Proposal">Proposal</option>
-                    <option value="Approval Sheet">Approval Sheet</option>
-                    <option value="General">General Correspondence</option>
-                  </select>
+                  <label className="form-label small fw-bold">
+                    Document Type <span className="text-danger">*</span> (Target Folder)
+                  </label>
+                  {!isCustomType ? (
+                    <select 
+                      className="form-select form-select-sm border-success"
+                      value={meta.DocumentType}
+                      onChange={(e) => {
+                        if (e.target.value === '__NEW__') {
+                          setIsCustomType(true);
+                        } else {
+                          setMeta({ ...meta, DocumentType: e.target.value });
+                        }
+                      }}
+                      required
+                    >
+                      {documentTypes.map(type => (
+                        <option key={type} value={type}>📁 {type}</option>
+                      ))}
+                      <option value="__NEW__">+ Add Custom Document Type...</option>
+                    </select>
+                  ) : (
+                    <div className="input-group input-group-sm">
+                      <input 
+                        type="text" 
+                        className="form-control form-control-sm border-success" 
+                        placeholder="Enter custom type..."
+                        value={customTypeInput}
+                        onChange={(e) => setCustomTypeInput(e.target.value)}
+                        autoFocus
+                      />
+                      <button 
+                        type="button" 
+                        className="btn btn-outline-secondary"
+                        onClick={() => {
+                          setIsCustomType(false);
+                          setCustomTypeInput('');
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="col-md-6">

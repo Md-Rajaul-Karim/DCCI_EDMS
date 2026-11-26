@@ -190,7 +190,9 @@ public class DocumentController : ControllerBase
                            ) AS LockedByCaseAppId
                     FROM Documents d
                     LEFT JOIN DepartmentFolders f ON d.DepartmentFolderId = f.Id
-                    WHERE d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree)";
+                    WHERE (d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree)
+                           OR LOWER(d.DocumentType) = (SELECT LOWER(Code) FROM DepartmentFolders WHERE Id = @FolderId)
+                           OR LOWER(d.DocumentType) = (SELECT LOWER(Name) FROM DepartmentFolders WHERE Id = @FolderId))";
             }
             else
             {
@@ -293,7 +295,9 @@ public class DocumentController : ControllerBase
                         INNER JOIN SubFolderTree sft ON f.ParentId = sft.Id
                     )
                     SELECT COUNT(1) FROM Documents d 
-                    WHERE d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree) AND d.IsDeleted = 0";
+                    WHERE (d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree)
+                           OR LOWER(d.DocumentType) = (SELECT LOWER(Code) FROM DepartmentFolders WHERE Id = @FolderId)
+                           OR LOWER(d.DocumentType) = (SELECT LOWER(Name) FROM DepartmentFolders WHERE Id = @FolderId)) AND d.IsDeleted = 0";
 
                 archivedSql = @"
                     WITH RECURSIVE SubFolderTree AS (
@@ -303,7 +307,9 @@ public class DocumentController : ControllerBase
                         INNER JOIN SubFolderTree sft ON f.ParentId = sft.Id
                     )
                     SELECT COUNT(1) FROM Documents d 
-                    WHERE d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree) AND d.IsDeleted = 1";
+                    WHERE (d.DepartmentFolderId IN (SELECT Id FROM SubFolderTree)
+                           OR LOWER(d.DocumentType) = (SELECT LOWER(Code) FROM DepartmentFolders WHERE Id = @FolderId)
+                           OR LOWER(d.DocumentType) = (SELECT LOWER(Name) FROM DepartmentFolders WHERE Id = @FolderId)) AND d.IsDeleted = 1";
             }
             else
             {
@@ -478,6 +484,16 @@ public class DocumentController : ControllerBase
 
             var relativePath = $"/media/documents/{uniqueFileName}";
             var docName = string.IsNullOrWhiteSpace(meta.Name) ? Path.GetFileNameWithoutExtension(file.FileName) : meta.Name;
+            var docType = string.IsNullOrEmpty(meta.DocumentType) ? "WORK ORDER" : meta.DocumentType;
+            var targetFolderId = meta.DepartmentFolderId;
+            if (targetFolderId <= 0)
+            {
+                targetFolderId = await conn.ExecuteScalarAsync<int>(
+                    "SELECT Id FROM DepartmentFolders WHERE LOWER(Code) = LOWER(@DocType) OR LOWER(Name) = LOWER(@DocType) LIMIT 1",
+                    new { DocType = docType }
+                );
+                if (targetFolderId <= 0) targetFolderId = 10;
+            }
 
             var docId = await conn.QuerySingleAsync<int>(@"
                 INSERT INTO Documents (
@@ -500,8 +516,8 @@ public class DocumentController : ControllerBase
                 FileExtension = ext,
                 FileSizeBytes = file.Length,
                 ContentType = file.ContentType ?? "application/octet-stream",
-                DocumentType = string.IsNullOrEmpty(meta.DocumentType) ? "WORK ORDER" : meta.DocumentType,
-                DepartmentFolderId = meta.DepartmentFolderId > 0 ? meta.DepartmentFolderId : 1,
+                DocumentType = docType,
+                DepartmentFolderId = targetFolderId,
                 ExpiryDate = meta.ExpiryDate,
                 ActionUponExpiry = string.IsNullOrEmpty(meta.ActionUponExpiry) ? "NONE" : meta.ActionUponExpiry,
                 Tags = meta.Tags ?? "",
