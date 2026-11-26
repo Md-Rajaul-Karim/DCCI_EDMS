@@ -328,13 +328,11 @@ export default function WorkflowView({ currentUser }) {
         <div class="text-start mb-2">
           <label class="form-label small fw-bold text-dark">Select Target Reviewer / Department:</label>
           <select id="swal-target-role" class="form-select form-select-sm mb-3">
+            <option value="Checker (Officer IT)">Checker / Technical Officer (Rahul Acharjee)</option>
             <option value="Accounts & Finance">Accounts & Finance (CFO)</option>
-            <option value="Head of Department">Head of Department (Dilip Roy)</option>
+            <option value="Head of Department">Head of Department (Engr. Dilip K Roy)</option>
             <option value="Secretary General">Secretary General (SG)</option>
             <option value="President of DCCI">President of DCCI</option>
-            <option value="Legal Cell">Legal Cell</option>
-            <option value="Internal Audit Cell">Internal Audit Cell</option>
-            <option value="Checker (Officer IT)">Checker (Officer IT)</option>
           </select>
           <label class="form-label small fw-bold text-dark">Review Instructions / Note (নোট বা পরামর্শ):</label>
           <textarea id="swal-review-notes" class="form-control form-control-sm" rows="3" placeholder="Specify review remarks or queries...">${actionComments || ''}</textarea>
